@@ -2,9 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { User, LogOut, Star, ArrowLeft, Settings, Bell, MapPin, Trash2, Edit3, X, Camera, ShieldAlert } from 'lucide-react';
 
-const BASE_URL = `https://roomkhojo-api.onrender.com`;
+const VITE_API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+const BASE_URL = VITE_API_BASE_URL ? VITE_API_BASE_URL.replace('/api', '') : 'https://roomkhojo-api.onrender.com';
 const getImageUrl = (path) => !path ? 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=400&q=80' : path.startsWith('http') ? path : `${BASE_URL}${path}`;
-const facilityOptions = ['Wi-Fi', 'AC', 'Water 24x7', 'Electricity', 'Geyser', 'RO Water', 'Parking', 'CCTV', 'Meals', 'Attached Washroom'];
 
 export default function UserDashboard() {
   const navigate = useNavigate();
@@ -17,6 +17,17 @@ export default function UserDashboard() {
   const [editForm, setEditForm] = useState({ title: '', price: '', type: 'Boys', category: 'PG', landmark: '', mobile: '', description: [] });
   const [editImage, setEditImage] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [sysSettings, setSysSettings] = useState({ facilities: ['Wi-Fi', 'AC', 'Water 24x7', 'Electricity', 'Geyser', 'RO Water', 'Parking', 'CCTV', 'Meals', 'Attached Washroom'] });
+
+  const fetchSystemSettings = async () => {
+    try {
+      const res = await fetch(`${BASE_URL}/api/admin/settings`);
+      const data = await res.json();
+      if (data.success && data.settings) {
+         setSysSettings(data.settings);
+      }
+    } catch(e) {}
+  };
 
   useEffect(() => {
     const savedUser = localStorage.getItem('roomkhojo_user');
@@ -24,6 +35,7 @@ export default function UserDashboard() {
       const parsedUser = JSON.parse(savedUser);
       setCurrentUser(parsedUser);
       fetchRooms(parsedUser.id);
+      fetchSystemSettings();
     } else {
       navigate('/');
     }
@@ -92,6 +104,12 @@ export default function UserDashboard() {
     setIsSubmitting(false);
   };
 
+  const getDaysLeft = (expiryDate, plan) => {
+    if (plan === 'regular' || !plan) return null;
+    if (!expiryDate) return null;
+    return Math.ceil((new Date(expiryDate) - new Date()) / (1000 * 60 * 60 * 24));
+  };
+
   return (
     <div className="h-[100dvh] w-full bg-gray-50 flex flex-col font-sans">
       <header className="bg-brand text-white p-6 rounded-b-[40px] shadow-lg relative shrink-0">
@@ -114,17 +132,32 @@ export default function UserDashboard() {
             <div className="bg-white p-10 rounded-3xl shadow-sm border border-gray-100 flex flex-col items-center text-center"><div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-4"><Bell size={24} className="text-gray-300"/></div><p className="text-gray-500 font-bold">Abhi aapne koi room ad post nahi kiya hai.</p><button onClick={() => navigate('/')} className="mt-4 text-brand font-black underline">Go post an ad</button></div>
         ) : (
             <div className="grid gap-4 pb-10">
-                {myRooms.map(room => (
+                {myRooms.map(room => {
+                const daysLeft = getDaysLeft(room.expiryDate, room.promoPlan);
+                const isExpired = daysLeft !== null && daysLeft <= 0;
+                const isExpiringSoon = daysLeft !== null && daysLeft > 0 && daysLeft <= 3;
+
+                return (
                     <div key={room._id} className="bg-white rounded-3xl overflow-hidden shadow-sm border border-gray-100 p-3 flex flex-col gap-2 relative">
-                        {/* 🚨 PENDING BANNER */}
+                        {/* 🚨 STATUS BANNERS */}
                         {!room.isApproved && (
-                          <div className="absolute top-0 left-0 right-0 bg-yellow-400 text-yellow-900 text-[10px] font-black text-center py-1 uppercase tracking-widest z-10">
+                          <div className="absolute top-0 left-0 right-0 bg-yellow-400 text-yellow-900 text-[10px] font-black text-center py-1 uppercase tracking-widest z-10 shadow-sm">
                             Verification Pending (Hidden)
                           </div>
                         )}
+                        {room.isApproved && isExpired && (
+                          <div className="absolute top-0 left-0 right-0 bg-red-500 text-white text-[10px] font-black text-center py-1 uppercase tracking-widest z-10 shadow-sm">
+                            ⚠️ Promo Plan Expired (Hidden from map)
+                          </div>
+                        )}
+                        {room.isApproved && isExpiringSoon && (
+                          <div className="absolute top-0 left-0 right-0 bg-orange-500 text-white text-[10px] font-black text-center py-1 uppercase tracking-widest z-10 shadow-sm">
+                            ⏱️ Expiring in {daysLeft} Days
+                          </div>
+                        )}
 
-                        <div className={`flex gap-4 ${!room.isApproved ? 'mt-4 opacity-80' : ''}`}>
-                          <img src={getImageUrl(room.image)} className="w-24 h-24 rounded-2xl object-cover bg-gray-200 shrink-0" alt="Room" />
+                        <div className={`flex gap-4 ${(!room.isApproved || isExpired) ? 'mt-4 opacity-80' : isExpiringSoon ? 'mt-4' : ''}`}>
+                          <img src={getImageUrl(room.image)} className="w-24 h-24 rounded-2xl object-cover bg-gray-200 shrink-0 border border-gray-100" alt="Room" />
                           <div className="flex-1 py-1 flex flex-col justify-between">
                               <div>
                                   <div className="flex justify-between items-start">
@@ -134,26 +167,30 @@ export default function UserDashboard() {
                                   <p className="text-brand font-black mt-1">{room.price}</p>
                                   <p className="text-xs font-bold text-gray-400 mt-1 flex items-center gap-1"><MapPin size={12}/> {room.landmark || 'Hanumangarh'}</p>
                               </div>
-                              <div className="mt-2">
+                              <div className="mt-2 flex items-center gap-2">
                                 <span className={`text-[10px] font-black px-2 py-1 rounded-lg ${room.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
                                   {room.isActive ? '🟢 Active' : '🔴 Inactive'}
                                 </span>
+                                {daysLeft !== null && daysLeft > 3 && (
+                                  <span className="text-[10px] font-bold text-gray-500">{daysLeft} Days Left</span>
+                                )}
                               </div>
                           </div>
                         </div>
 
                         <div className="flex items-center justify-between border-t border-gray-100 pt-2 mt-1">
-                          <button onClick={() => toggleRoomStatus(room._id)} className="text-[10px] font-bold text-gray-500 border border-gray-200 bg-gray-50 px-3 py-1.5 rounded-lg active:scale-95">Hide/Show</button>
+                          <button onClick={() => toggleRoomStatus(room._id)} className="text-[10px] font-bold text-gray-500 border border-gray-200 bg-gray-50 px-3 py-1.5 rounded-lg active:scale-95 transition-colors hover:bg-gray-100">Hide/Show</button>
                           <div className="flex gap-2">
                             {/* 🚨 EDIT BUTTON */}
-                            <button onClick={() => openEditModal(room)} className="text-[11px] font-black text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg active:scale-95 flex items-center gap-1"><Edit3 size={14}/> Edit</button>
-                            <button onClick={() => deleteRoom(room._id)} className="text-[11px] font-black text-red-600 bg-red-50 p-1.5 px-3 rounded-lg active:scale-95 flex items-center gap-1"><Trash2 size={14}/> Delete</button>
+                            <button onClick={() => openEditModal(room)} className="text-[11px] font-black text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg active:scale-95 flex items-center gap-1 transition-colors hover:bg-blue-100"><Edit3 size={14}/> Edit</button>
+                            <button onClick={() => deleteRoom(room._id)} className="text-[11px] font-black text-red-600 bg-red-50 p-1.5 px-3 rounded-lg active:scale-95 flex items-center gap-1 transition-colors hover:bg-red-100"><Trash2 size={14}/> Delete</button>
                           </div>
                         </div>
                     </div>
-                ))}
-            </div>
-        )} 
+                );
+            })}
+        </div>
+        )}
       </div>
 
       <div className="p-6 bg-white border-t shrink-0">
@@ -189,7 +226,7 @@ export default function UserDashboard() {
               <div>
                 <p className="text-xs font-black text-gray-500 mb-2 uppercase">Update Facilities</p>
                 <div className="flex flex-wrap gap-2">
-                  {facilityOptions.map(fac => (
+                  {(sysSettings.facilities || []).map(fac => (
                     <button type="button" key={fac} onClick={() => setEditForm({...editForm, description: editForm.description.includes(fac) ? editForm.description.filter(f => f !== fac) : [...editForm.description, fac]})} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-colors ${editForm.description.includes(fac) ? 'bg-brand text-white border-brand shadow-sm' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>
                       {fac}
                     </button>
