@@ -202,7 +202,16 @@ export default function MainApp() {
         <div className={`absolute inset-0 transition-opacity duration-500 ${view === 'map' ? 'opacity-100 z-10' : 'opacity-0 z-0'}`}><div ref={mapContainer} className="w-full h-full" /></div>
         {view === 'map' && !isPickingLocation && (<button onClick={handleLiveLocation} className="absolute bottom-28 right-4 z-40 bg-white p-3 rounded-full shadow-xl border border-gray-100 text-brand active:scale-90 transition-transform"><Navigation size={24} fill="currentColor"/></button>)}
         {view === 'map' && isPickingLocation && (<button onClick={handleLiveLocation} className="absolute bottom-[90px] right-4 z-40 bg-white px-4 py-2.5 rounded-full shadow-xl border border-gray-100 text-brand font-black text-xs flex items-center gap-2 active:scale-90 transition-transform"><Navigation size={16} fill="currentColor"/> My Location</button>)}
-        {isPickingLocation && view === 'map' && (<div className="absolute inset-0 z-30 pointer-events-none flex flex-col items-center justify-center"><Target size={40} className="text-brand drop-shadow-xl -mt-10" /><div className="mt-2 bg-white px-4 py-1 rounded-full shadow-md text-xs font-bold text-gray-700">Drag map to pin</div></div>)}
+        {isPickingLocation && view === 'map' && (
+          <div className="absolute inset-0 z-30 pointer-events-none">
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-full flex flex-col items-center text-4xl drop-shadow-2xl">
+              📍
+            </div>
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 mt-2 bg-white px-4 py-1 rounded-full shadow-md text-xs font-bold text-gray-700">
+              Drag map to pin
+            </div>
+          </div>
+        )}
         
         <div className={`absolute inset-0 z-20 bg-background overflow-y-auto p-4 transition-transform duration-500 ${view === 'list' ? 'translate-y-0' : 'translate-y-full'}`}>
           <div className="grid gap-5 pb-32">
