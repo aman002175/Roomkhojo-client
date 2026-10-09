@@ -1,17 +1,24 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import maplibregl from 'maplibre-gl';
+import * as maplibregl from 'maplibre-gl'; // v6 ESM-only: namespace import (default import hata)
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { X, Phone, MessageCircle, Map as MapIcon, List, Plus, Camera, Target, Info, FileText, Shield, ChevronRight, Menu, User, MapPin, Lock, Search, Navigation, AlertTriangle } from 'lucide-react';
-import { legalData } from './LegalData'; 
 import { GoogleLogin } from '@react-oauth/google';
-import { jwtDecode } from "jwt-decode";
 
 const VITE_API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const BASE_URL = VITE_API_BASE_URL ? VITE_API_BASE_URL.replace('/api', '') : 'https://roomkhojo-api.onrender.com';
 const API_URL = `${BASE_URL}/api/rooms`;
 const ADMIN_API = `${BASE_URL}/api/admin`; 
 const getImageUrl = (path) => !path ? 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=400&q=80' : path.startsWith('http') ? path : `${BASE_URL}${path}`;
+
+// UPI note ke liye local code (asli paymentCode server banata hai)
+const makePayCode = () => 'RK-' + Math.random().toString(36).substr(2, 5).toUpperCase();
+
+// Logged-in API calls ke liye Bearer header
+const authHeaders = () => {
+  const token = localStorage.getItem('roomkhojo_token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
 
 export default function MainApp() {
   const navigate = useNavigate();
@@ -27,11 +34,10 @@ export default function MainApp() {
   const [searchQuery, setSearchQuery] = useState(''); 
   
   const [isMenuOpen, setIsMenuOpen] = useState(false); 
-  const [activeLegalPage, setActiveLegalPage] = useState(null);
-  const [authMode, setAuthMode] = useState(null); 
+  const [authMode, setAuthMode] = useState(null);
   
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [currentUser, setCurrentUser] = useState(null);
+  // Refresh par login bana rahe (session localStorage me hai)
+  const [isLoggedIn, setIsLoggedIn] = useState(() => !!localStorage.getItem('roomkhojo_user'));
   
   const [isPostAdOpen, setIsPostAdOpen] = useState(false); 
   const [isPickingLocation, setIsPickingLocation] = useState(false);
@@ -53,21 +59,118 @@ export default function MainApp() {
   const [postLng, setPostLng] = useState(null);
   const [postLat, setPostLat] = useState(null); 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [authName, setAuthName] = useState('');
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPass, setAuthPass] = useState('');
+  const [payRef, setPayRef] = useState('');
+  // Forgot-password (OTP) states
+  const [forgotStep, setForgotStep] = useState(null);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotOtp, setForgotOtp] = useState('');
+  const [forgotNewPass, setForgotNewPass] = useState('');
+  const [forgotResetToken, setForgotResetToken] = useState('');
 
   const [sysSettings, setSysSettings] = useState({
     categories: ['PG', 'Flat', 'Hostel', 'Library', 'Office'],
     pricing: { regular: '0', promo7: '299', promo15: '499', promo30: '899', upiId: 'admin@ybl' }
   });
 
-  useEffect(() => { 
-    fetchRooms(); fetchSystemSettings(); 
-    const savedUser = localStorage.getItem('roomkhojo_user');
-    if (savedUser) { setIsLoggedIn(true); setCurrentUser(JSON.parse(savedUser)); }
+  useEffect(() => {
+    fetch(`${API_URL}`)
+      .then(res => res.json())
+      .then(data => { if (data.success) setRooms(data.rooms); })
+      .catch(() => { /* list load fail: agli baar retry hoga */ });
+    fetch(`${ADMIN_API}/settings`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && data.settings) {
+          setSysSettings(data.settings);
+          if (data.settings.categories.length > 0) setPostCategory(data.settings.categories[0]);
+        }
+      })
+      .catch(() => { /* settings optional: defaults use honge */ });
   }, []);
-
-  const fetchRooms = async () => { try { const res = await fetch(API_URL); const data = await res.json(); if (data.success) setRooms(data.rooms); } catch (e) {} };
-  const fetchSystemSettings = async () => { try { const res = await fetch(`${ADMIN_API}/settings`); const data = await res.json(); if (data.success && data.settings) { setSysSettings(data.settings); if(data.settings.categories.length > 0) setPostCategory(data.settings.categories[0]); } } catch (e) { } };
   const dynamicCategories = [{ id: 'all', name: 'All Rooms', icon: '🏠' }, ...sysSettings.categories.map(cat => ({ id: cat, name: cat, icon: cat==='PG'?'👥':cat==='Flat'?'🏢':cat==='Library'?'📚':cat==='Office'?'💼':'🏨' }))];
+
+  // Login/signup success par session save (token + user)
+  const saveSession = (token, userData) => {
+    localStorage.setItem('roomkhojo_token', token);
+    localStorage.setItem('roomkhojo_user', JSON.stringify(userData));
+    setIsLoggedIn(true);
+    setAuthMode(null);
+  };
+
+  // Google idToken backend par verify hota hai (C7 fix — client-parsing nahi)
+  const handleGoogleSuccess = async (credentialResponse) => {
+    try {
+      const res = await fetch(`${BASE_URL}/api/users/google`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idToken: credentialResponse.credential })
+      });
+      const data = await res.json();
+      if (data.success) { saveSession(data.token, data.user); alert(`Namaste ${data.user.name}!`); }
+      else alert(data.message || 'Google Login fail.');
+    } catch { alert('Server connection failed.'); }
+  };
+
+  // Email/password real API flow (pehle fake tha — C7 fix)
+  const handleEmailAuth = async () => {
+    try {
+      const endpoint = authMode === 'signup' ? 'signup' : 'login';
+      const body = authMode === 'signup'
+        ? { name: authName.trim(), email: authEmail.trim(), password: authPass }
+        : { email: authEmail.trim(), password: authPass };
+      const res = await fetch(`${BASE_URL}/api/users/${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      if (data.success) { saveSession(data.token, data.user); alert(`Namaste ${data.user.name}!`); }
+      else alert(data.message || 'Login fail.');
+    } catch { alert('Server connection failed.'); }
+  };
+
+  // Forgot password — OTP flow (R1-R4)
+  const handleForgotSend = async () => {
+    try {
+      const res = await fetch(`${BASE_URL}/api/users/forgot-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: forgotEmail.trim() })
+      });
+      const data = await res.json();
+      alert(data.message);
+      if (data.success) setForgotStep('otp');
+    } catch { alert('Server connection failed.'); }
+  };
+
+  const handleForgotVerify = async () => {
+    try {
+      const res = await fetch(`${BASE_URL}/api/users/verify-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: forgotEmail.trim(), otp: forgotOtp.trim() })
+      });
+      const data = await res.json();
+      if (data.success) { setForgotResetToken(data.resetToken); setForgotStep('newpass'); }
+      else alert(data.message);
+    } catch { alert('Server connection failed.'); }
+  };
+
+  const handleForgotReset = async () => {
+    try {
+      const res = await fetch(`${BASE_URL}/api/users/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: forgotEmail.trim(), resetToken: forgotResetToken, newPassword: forgotNewPass })
+      });
+      const data = await res.json();
+      alert(data.message);
+      if (data.success) { setForgotStep(null); setForgotEmail(''); setForgotOtp(''); setForgotNewPass(''); setForgotResetToken(''); }
+    } catch { alert('Server connection failed.'); }
+  };
 
   const getPayAmount = () => {
     if (adType === 'regular') return sysSettings.pricing.regular;
@@ -86,7 +189,7 @@ export default function MainApp() {
         if (userLocMarkerRef.current) userLocMarkerRef.current.remove();
         const el = document.createElement('div'); el.className = 'w-5 h-5 bg-blue-500 border-[3px] border-white rounded-full shadow-[0_0_15px_rgba(59,130,246,0.8)] animate-pulse';
         userLocMarkerRef.current = new maplibregl.Marker({ element: el }).setLngLat([longitude, latitude]).addTo(map.current);
-      }, (error) => {
+      }, () => {
         alert("Location permission denied ya accuracy issue hai. Kripya map par drag karke location pin karein.");
       }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
     }
@@ -98,7 +201,7 @@ export default function MainApp() {
       try {
         const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}+India`); const data = await res.json();
         if (data && data.length > 0) { if (map.current) map.current.flyTo({ center: [parseFloat(data[0].lon), parseFloat(data[0].lat)], zoom: 13, speed: 1.5 }); } else { alert(`Nahi mila.`); }
-      } catch (error) {}
+      } catch { /* search fail: user dobara try karega */ }
     }
   };
 
@@ -107,32 +210,31 @@ export default function MainApp() {
     if(!postLng || !postLat) return alert("📍 Kripya map par location select karein! 'Map' button par click karein ya Live Location chunein.");
     const amount = getPayAmount();
     if (amount === '0' || amount === '') {
-      submitAd('FREE'); 
+      submitAd(); 
     } else {
-      const code = 'RK-' + Math.random().toString(36).substr(2, 5).toUpperCase();
-      setPayCode(code); setShowPaymentWindow(true); 
+      const code = makePayCode();
+      setPayCode(code); setShowPaymentWindow(true);
     }
   };
 
-  const submitAd = async (finalCode) => {
+  const submitAd = async () => {
     setIsSubmitting(true);
     try {
       const fd = new FormData();
       fd.append('title', postTitle); fd.append('price', `₹${postPrice}`); fd.append('category', postCategory); fd.append('type', postType); fd.append('landmark', postLandmark); fd.append('mobile', postMobile); 
       fd.append('description', selectedFacilities.join(', '));
       fd.append('lng', postLng); fd.append('lat', postLat); fd.append('isPromoted', adType === 'promo');
-      fd.append('userId', currentUser ? currentUser.id : 'unknown_user'); 
-      fd.append('ownerName', currentUser ? currentUser.name : 'Owner');
-      fd.append('promoPlan', adType === 'promo' ? promoPlan : 'regular'); 
-      fd.append('paymentCode', finalCode);
+      fd.append('promoPlan', adType === 'promo' ? promoPlan : 'regular');
+      fd.append('paymentRef', payRef.trim());
       if (postImage) fd.append('image', postImage);
-      
-      const res = await fetch(API_URL, { method: 'POST', body: fd }); const data = await res.json();
+
+      // NOTE: userId/ownerName/paymentCode server token se leta hai (spoof-proof).
+      const res = await fetch(API_URL, { method: 'POST', headers: authHeaders(), body: fd }); const data = await res.json();
       if(data.success) { 
         alert("🎉 Ad submitted! Admin verification ke baad live hoga."); 
-        setIsPostAdOpen(false); setShowPaymentWindow(false); setPostTitle(''); setPostPrice(''); setPostMobile(''); setSelectedFacilities([]); setPostLng(null); setPostLat(null); setPostImage(null); 
+        setIsPostAdOpen(false); setShowPaymentWindow(false); setPostTitle(''); setPostPrice(''); setPostMobile(''); setSelectedFacilities([]); setPostLng(null); setPostLat(null); setPostImage(null); setPayRef(''); 
       }
-    } catch (e) { alert("Server connection failed."); }
+    } catch { alert("Server connection failed."); }
     setIsSubmitting(false);
   };
 
@@ -166,7 +268,8 @@ export default function MainApp() {
       const isSelected = selectedRoom && selectedRoom._id === room._id;
       const el = document.createElement('div'); 
       el.className = `font-bold px-3 py-1.5 rounded-full shadow-lg border-2 border-white text-xs cursor-pointer transition-all duration-300 ${room.isPromoted ? 'bg-orange-500 z-20 text-white' : 'bg-brand text-white'} ${isSelected ? '-translate-y-3 scale-110 shadow-2xl z-40' : 'active:scale-90'}`; 
-      el.innerHTML = room.isPromoted ? `⭐ ${room.price}` : room.price;
+      // textContent (innerHTML nahi) — DB data se DOM-XSS ka risk khatam
+      el.textContent = room.isPromoted ? `⭐ ${room.price}` : room.price;
       const onClick = (e) => { e.stopPropagation(); setSelectedRoom(room); map.current.flyTo({ center: [room.lng, room.lat], zoom: 15.5 }); };
       el.addEventListener('click', onClick); el.addEventListener('touchstart', onClick);
       const marker = new maplibregl.Marker({ element: el }).setLngLat([room.lng, room.lat]).addTo(map.current); markersRef.current.push(marker);
@@ -181,8 +284,8 @@ export default function MainApp() {
     
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
-        (pos) => { setIsPostAdOpen(true); },
-        (err) => { setShowLocationWarning(true); },
+        () => { setIsPostAdOpen(true); },
+        () => { setShowLocationWarning(true); },
         { enableHighAccuracy: true, timeout: 5000 }
       );
     } else {
@@ -249,7 +352,7 @@ export default function MainApp() {
       <div className={`fixed inset-0 z-[8000] transition-opacity duration-300 ${isMenuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}><div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setIsMenuOpen(false)}></div><div className={`absolute top-0 left-0 bottom-0 w-[80%] max-w-sm bg-white flex flex-col transition-transform duration-300 ${isMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}><div className="p-6 bg-brand/5 border-b"><h2 className="text-3xl font-black text-gray-800">Room<span className="text-brand">Khojo</span></h2></div><div className="p-4 space-y-2 flex-1 overflow-y-auto mt-4"><button onClick={() => { navigate('/about'); setIsMenuOpen(false); }} className="w-full flex items-center justify-between p-4 rounded-2xl bg-gray-50 hover:bg-gray-100 font-bold text-gray-700"><div className="flex items-center gap-3"><Info size={20} className="text-brand"/> About Us</div> <ChevronRight size={18} className="text-gray-400"/></button><button onClick={() => { navigate('/terms'); setIsMenuOpen(false); }} className="w-full flex items-center justify-between p-4 rounded-2xl bg-gray-50 hover:bg-gray-100 font-bold text-gray-700"><div className="flex items-center gap-3"><FileText size={20} className="text-brand"/> Terms</div> <ChevronRight size={18} className="text-gray-400"/></button><button onClick={() => { navigate('/refund'); setIsMenuOpen(false); }} className="w-full flex items-center justify-between p-4 rounded-2xl bg-gray-50 hover:bg-gray-100 font-bold text-gray-700"><div className="flex items-center gap-3"><Shield size={20} className="text-brand"/> Refund Policy</div> <ChevronRight size={18} className="text-gray-400"/></button></div></div></div>
       <div className={`fixed inset-0 z-[7500] bg-white transition-transform duration-500 ${authMode ? 'translate-y-0' : 'translate-y-full'}`}>
         {authMode && (
-          <div className="flex flex-col h-full p-8 justify-center relative"><button onClick={() => setAuthMode(null)} className="absolute top-8 right-8 p-2 bg-gray-100 rounded-full"><X size={24}/></button><div className="w-16 h-16 bg-brand/10 rounded-2xl flex items-center justify-center text-brand mb-6"><Lock size={32}/></div><h2 className="text-4xl font-black mb-2">{authMode === 'login' ? 'Login' : 'Signup'}</h2><p className="text-gray-500 font-bold mb-4">{authMode === 'login' ? 'Welcome back!' : 'Join to post ads.'}</p><div className="flex items-start gap-3 bg-amber-50 text-amber-800 p-4 rounded-2xl text-xs font-bold mb-6 border border-amber-200"><AlertTriangle size={20} className="shrink-0 text-amber-600 mt-0.5" /><p><strong>💡 Google Login is Preferred!</strong> Hamare paas abhi Password Reset ka option nahi hai. Agar aap password bhool gaye toh account wapas nahi milega, isliye <strong>Google se login karna behtar hai</strong>.</p></div><div className="w-full flex justify-center mb-6"><GoogleLogin onSuccess={credentialResponse => { const details = jwtDecode(credentialResponse.credential); const userData = { id: details.sub, name: details.name, email: details.email, pic: details.picture }; localStorage.setItem('roomkhojo_user', JSON.stringify(userData)); setCurrentUser(userData); setIsLoggedIn(true); setAuthMode(null); alert(`Namaste ${details.name}!`); }} onError={() => { alert('Google Login fail.'); }} useOneTap shape="rectangular" theme="outline" size="large" text="continue_with" width="300" /></div><div className="flex items-center gap-4 mb-6"><div className="flex-1 h-px bg-gray-200"></div><span className="text-xs font-bold text-gray-400 uppercase">OR EMAIL</span><div className="flex-1 h-px bg-gray-200"></div></div><div className="space-y-4 mb-6">{authMode === 'signup' && <input type="text" placeholder="Full Name" className="w-full p-4 bg-gray-50 rounded-2xl outline-none font-bold" />}<input type="email" placeholder="Email" className="w-full p-4 bg-gray-50 rounded-2xl outline-none font-bold" /><input type="password" placeholder="Password" className="w-full p-4 bg-gray-50 rounded-2xl outline-none font-bold" /></div><button onClick={() => { setIsLoggedIn(true); setAuthMode(null); }} className="w-full bg-brand text-white py-4 rounded-2xl font-black text-xl shadow-xl shadow-brand/20">Continue</button><p className="text-center font-bold text-gray-500 mt-6">{authMode === 'login' ? "New here? " : "Already member? "}<span onClick={() => setAuthMode(authMode === 'login' ? 'signup' : 'login')} className="text-brand cursor-pointer">Click here</span></p></div>
+          <div className="flex flex-col h-full p-8 justify-center relative"><button onClick={() => setAuthMode(null)} className="absolute top-8 right-8 p-2 bg-gray-100 rounded-full"><X size={24}/></button><div className="w-16 h-16 bg-brand/10 rounded-2xl flex items-center justify-center text-brand mb-6"><Lock size={32}/></div><h2 className="text-4xl font-black mb-2">{authMode === 'login' ? 'Login' : 'Signup'}</h2><p className="text-gray-500 font-bold mb-4">{authMode === 'login' ? 'Welcome back!' : 'Join to post ads.'}</p><div className="flex items-start gap-3 bg-amber-50 text-amber-800 p-4 rounded-2xl text-xs font-bold mb-6 border border-amber-200"><AlertTriangle size={20} className="shrink-0 text-amber-600 mt-0.5" /><p><strong>💡 Google Login is Preferred!</strong> Ek tap me login — koi password yaad rakhne ki zaroorat nahi.</p></div><div className="w-full flex justify-center mb-6"><GoogleLogin onSuccess={handleGoogleSuccess} onError={() => { alert('Google Login fail.'); }} useOneTap shape="rectangular" theme="outline" size="large" text="continue_with" width="300" /></div><div className="flex items-center gap-4 mb-6"><div className="flex-1 h-px bg-gray-200"></div><span className="text-xs font-bold text-gray-400 uppercase">OR EMAIL</span><div className="flex-1 h-px bg-gray-200"></div></div><div className="space-y-4 mb-6">{authMode === 'signup' && <input type="text" placeholder="Full Name" value={authName} onChange={(e) => setAuthName(e.target.value)} className="w-full p-4 bg-gray-50 rounded-2xl outline-none font-bold" />}<input type="email" placeholder="Email" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} className="w-full p-4 bg-gray-50 rounded-2xl outline-none font-bold" /><input type="password" placeholder="Password" value={authPass} onChange={(e) => setAuthPass(e.target.value)} className="w-full p-4 bg-gray-50 rounded-2xl outline-none font-bold" /></div><button onClick={handleEmailAuth} className="w-full bg-brand text-white py-4 rounded-2xl font-black text-xl shadow-xl shadow-brand/20">Continue</button><p className="text-center mt-3"><span onClick={() => { setForgotStep('email'); }} className="text-brand font-bold text-sm cursor-pointer underline">Forgot Password? OTP se reset karein</span></p>{forgotStep && (<div className="mt-4 p-4 bg-gray-50 rounded-2xl border space-y-3"><div className="flex justify-between items-center"><p className="font-black text-sm">Reset Password (OTP)</p><button onClick={() => setForgotStep(null)} className="text-gray-400 font-bold text-sm">✕</button></div>{forgotStep === 'email' && (<div className="space-y-3"><input type="email" placeholder="Registered Email" value={forgotEmail} onChange={(e) => setForgotEmail(e.target.value)} className="w-full p-3 bg-white rounded-xl outline-none font-bold text-sm border" /><button onClick={handleForgotSend} className="w-full bg-slate-900 text-white py-3 rounded-xl font-black text-sm">Send OTP</button></div>)}{forgotStep === 'otp' && (<div className="space-y-3"><input type="text" placeholder="6-digit OTP" value={forgotOtp} onChange={(e) => setForgotOtp(e.target.value)} className="w-full p-3 bg-white rounded-xl outline-none font-bold text-sm border" /><button onClick={handleForgotVerify} className="w-full bg-slate-900 text-white py-3 rounded-xl font-black text-sm">Verify OTP</button></div>)}{forgotStep === 'newpass' && (<div className="space-y-3"><input type="password" placeholder="Naya Password (min 6)" value={forgotNewPass} onChange={(e) => setForgotNewPass(e.target.value)} className="w-full p-3 bg-white rounded-xl outline-none font-bold text-sm border" /><button onClick={handleForgotReset} className="w-full bg-green-600 text-white py-3 rounded-xl font-black text-sm">Set New Password</button></div>)}</div>)}<p className="text-center font-bold text-gray-500 mt-6">{authMode === 'login' ? "New here? " : "Already member? "}<span onClick={() => setAuthMode(authMode === 'login' ? 'signup' : 'login')} className="text-brand cursor-pointer">Click here</span></p></div>
         )}
       </div>
 
@@ -280,7 +383,8 @@ export default function MainApp() {
               <div className="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-2xl"><p className="text-xs font-bold text-gray-500 mb-2 uppercase">Your Secret Payment Code</p><h3 className="text-3xl font-black tracking-widest text-gray-800">{payCode}</h3></div>
               <div className="flex items-start gap-3 bg-blue-50 text-blue-800 p-4 rounded-2xl text-left text-xs font-bold mb-6"><AlertTriangle size={24} className="shrink-0 text-blue-600 mt-0.5" /><p>Niche 'Pay via UPI App' par click karein. Aapki UPI app open hogi. <strong>Payment karne ke baad wapas yahan aakar 'I have paid' par click karna na bhoolein.</strong></p></div>
               <a href={`upi://pay?pa=${sysSettings.pricing.upiId || 'admin@ybl'}&pn=RoomKhojo&am=${getPayAmount()}&cu=INR&tn=Code: ${payCode}`} className="w-full bg-brand text-white py-4 rounded-2xl font-black text-lg flex items-center justify-center gap-2 mb-3 shadow-lg shadow-brand/30 active:scale-95 transition-transform">Pay via UPI App</a>
-              <button onClick={() => submitAd(payCode)} disabled={isSubmitting} className="w-full bg-green-50 text-green-700 py-4 rounded-2xl font-black flex items-center justify-center border border-green-200 active:scale-95 transition-transform">{isSubmitting ? 'Verifying...' : '✅ I have completed the payment'}</button>
+              <input type="text" value={payRef} onChange={(e) => setPayRef(e.target.value)} placeholder="UPI Ref / UTR No. (payment ke baad milta hai)" className="w-full p-4 bg-gray-50 rounded-2xl outline-none font-bold text-sm mb-3 border" />
+              <button onClick={() => submitAd()} disabled={isSubmitting} className="w-full bg-green-50 text-green-700 py-4 rounded-2xl font-black flex items-center justify-center border border-green-200 active:scale-95 transition-transform">{isSubmitting ? 'Verifying...' : '✅ I have completed the payment'}</button>
               <button onClick={() => setShowPaymentWindow(false)} className="mt-4 text-sm font-bold text-gray-400 underline">Cancel</button>
             </div>
           </div>

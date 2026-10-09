@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { User, LogOut, Star, ArrowLeft, Settings, Bell, MapPin, Trash2, Edit3, X, Camera, ShieldAlert } from 'lucide-react';
 
@@ -6,9 +6,19 @@ const VITE_API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const BASE_URL = VITE_API_BASE_URL ? VITE_API_BASE_URL.replace('/api', '') : 'https://roomkhojo-api.onrender.com';
 const getImageUrl = (path) => !path ? 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=400&q=80' : path.startsWith('http') ? path : `${BASE_URL}${path}`;
 
+// Logged-in API calls ke liye Bearer header
+const authHeaders = () => {
+  const token = localStorage.getItem('roomkhojo_token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
+
 export default function UserDashboard() {
   const navigate = useNavigate();
-  const [currentUser, setCurrentUser] = useState(null);
+  // Session lazy-load (refresh par login bana rehta hai)
+  const [currentUser] = useState(() => {
+    try { const saved = localStorage.getItem('roomkhojo_user'); return saved ? JSON.parse(saved) : null; } catch { return null; }
+  });
+  const [refreshKey, setRefreshKey] = useState(0);
   const [myRooms, setMyRooms] = useState([]);
 
   // 🚨 EDIT STATES
@@ -19,52 +29,35 @@ export default function UserDashboard() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [sysSettings, setSysSettings] = useState({ facilities: ['Wi-Fi', 'AC', 'Water 24x7', 'Electricity', 'Geyser', 'RO Water', 'Parking', 'CCTV', 'Meals', 'Attached Washroom'] });
 
-  const fetchSystemSettings = async () => {
-    try {
-      const res = await fetch(`${BASE_URL}/api/admin/settings`);
-      const data = await res.json();
-      if (data.success && data.settings) {
-         setSysSettings(data.settings);
-      }
-    } catch(e) {}
-  };
-
   useEffect(() => {
-    const savedUser = localStorage.getItem('roomkhojo_user');
-    if (savedUser) {
-      const parsedUser = JSON.parse(savedUser);
-      setCurrentUser(parsedUser);
-      fetchRooms(parsedUser.id);
-      fetchSystemSettings();
-    } else {
-      navigate('/');
-    }
-  }, [navigate]);
-
-  const fetchRooms = (userId) => {
-    fetch(`${BASE_URL}/api/rooms/user/${userId}`)
+    if (!currentUser) { navigate('/'); return; }
+    fetch(`${BASE_URL}/api/rooms/user/${currentUser.id}`, { headers: authHeaders() })
       .then(res => res.json())
       .then(data => { if (data.success) setMyRooms(data.rooms); })
-      .catch(err => console.error(err));
-  };
+      .catch((err) => console.error(err));
+    fetch(`${BASE_URL}/api/admin/settings`)
+      .then(res => res.json())
+      .then(data => { if (data.success && data.settings) setSysSettings(data.settings); })
+      .catch(() => { /* settings optional: defaults use honge */ });
+  }, [navigate, currentUser, refreshKey]);
 
-  const handleLogout = () => { localStorage.removeItem('roomkhojo_user'); navigate('/'); window.location.reload(); };
+  const handleLogout = () => { localStorage.removeItem('roomkhojo_user'); localStorage.removeItem('roomkhojo_token'); navigate('/'); window.location.reload(); };
 
   const toggleRoomStatus = async (roomId) => {
     try {
-      const res = await fetch(`${BASE_URL}/api/rooms/${roomId}/toggle-status`, { method: 'PATCH' });
+      const res = await fetch(`${BASE_URL}/api/rooms/${roomId}/toggle-status`, { method: 'PATCH', headers: authHeaders() });
       const data = await res.json();
       if (data.success) { setMyRooms(myRooms.map(room => room._id === roomId ? { ...room, isActive: data.isActive } : room)); }
-    } catch (err) { alert('Status update fail ho gaya.'); }
+    } catch { alert('Status update fail ho gaya.'); }
   };
 
   const deleteRoom = async (roomId) => {
     if (!window.confirm("⚠️ Kya aap sach mein is Ad ko hamesha ke liye Delete karna chahte hain?")) return;
     try {
-      const res = await fetch(`${BASE_URL}/api/rooms/${roomId}`, { method: 'DELETE' });
+      const res = await fetch(`${BASE_URL}/api/rooms/${roomId}`, { method: 'DELETE', headers: authHeaders() });
       const data = await res.json();
       if (data.success) { setMyRooms(myRooms.filter(room => room._id !== roomId)); alert("Ad successfully deleted!"); }
-    } catch (err) { alert('Delete fail ho gaya.'); }
+    } catch { alert('Delete fail ho gaya.'); }
   };
 
   // 🚨 OPEN EDIT MODAL
@@ -92,15 +85,15 @@ export default function UserDashboard() {
       fd.append('description', editForm.description.join(', '));
       if (editImage) fd.append('image', editImage);
 
-      const res = await fetch(`${BASE_URL}/api/rooms/${editingRoomId}/edit`, { method: 'PUT', body: fd });
+      const res = await fetch(`${BASE_URL}/api/rooms/${editingRoomId}/edit`, { method: 'PUT', headers: authHeaders(), body: fd });
       const data = await res.json();
       
       if(data.success) {
         alert("✅ Ad Updated! Admin approval ke liye bhej diya gaya hai (Pending Mode).");
         setIsEditModalOpen(false);
-        fetchRooms(currentUser.id); // Refresh data
+        setRefreshKey(k => k + 1); // Refresh data
       }
-    } catch (e) { alert("Error saving edits."); }
+    } catch { alert("Error saving edits."); }
     setIsSubmitting(false);
   };
 

@@ -1,5 +1,4 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import { User, LogOut, LayoutDashboard, Check, X, Settings, Lock, ShieldAlert, Save, Plus, BarChart3, Clock, MessageCircle, Smartphone, AlertTriangle } from 'lucide-react';
 
 const VITE_API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
@@ -8,9 +7,15 @@ const API_URL = `${BASE_URL}/api/rooms`;
 const ADMIN_API = `${BASE_URL}/api/admin`;
 const getImageUrl = (path) => !path ? 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=400&q=80' : path.startsWith('http') ? path : `${BASE_URL}${path}`;
 
+// Admin JWT (sessionStorage me) — hardcoded 'x-admin-secret' hata diya (C5 fix)
+const adminAuthHeaders = () => {
+  const token = sessionStorage.getItem('roomkhojo_admin_token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
+
 export default function AdminPanel() {
-  const navigate = useNavigate();
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  // Refresh par admin session bana rahe (JWT sessionStorage me hai — lazy init)
+  const [isAuthenticated, setIsAuthenticated] = useState(() => !!sessionStorage.getItem('roomkhojo_admin_token'));
   const [loginUser, setLoginUser] = useState('');
   const [loginPass, setLoginPass] = useState('');
   const [adminRooms, setAdminRooms] = useState([]);
@@ -29,16 +34,36 @@ export default function AdminPanel() {
   const [sysFacilities, setSysFacilities] = useState([]);
   const [sysPricing, setSysPricing] = useState({ regular: '0', promo7: '299', promo15: '499', promo30: '899', upiId: '' });
 
-  useEffect(() => { 
-    if (isAuthenticated) { fetchAdminRooms(); fetchSystemSettings(); } 
-  }, [isAuthenticated]);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    fetch(`${API_URL}/admin/all`, { headers: adminAuthHeaders() })
+      .then(res => res.json())
+      .then(data => { if (data.success) setAdminRooms(data.rooms); })
+      .catch(() => { /* list refresh fail: silent */ });
+    fetch(`${ADMIN_API}/settings`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && data.settings) {
+          setSysCategories(data.settings.categories || []);
+          setSysFacilities(data.settings.facilities || []);
+          setSysPricing(data.settings.pricing || { regular: '0', promo7: '299', promo15: '499', promo30: '899', upiId: '' });
+        }
+      })
+      .catch(() => { /* settings load fail: silent */ });
+  }, [isAuthenticated, refreshKey]);
 
   const handleLogin = async () => {
     try {
       const res = await fetch(`${ADMIN_API}/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: loginUser.trim(), password: loginPass.trim() }) });
       const data = await res.json();
-      if (data.success) setIsAuthenticated(true); else alert(data.message);
-    } catch (e) { alert("Server Error."); }
+      if (data.success && data.token) {
+        sessionStorage.setItem('roomkhojo_admin_token', data.token);
+        setLoginUser(''); setLoginPass('');
+        setIsAuthenticated(true);
+      } else alert(data.message || 'Login fail.');
+    } catch { alert("Server Error."); }
   };
 
   const handleChangeCredentials = async () => {
@@ -46,18 +71,10 @@ export default function AdminPanel() {
     if (!newAdminUser && !newAdminPass) return alert("New credentials daliye!");
     if (!window.confirm("⚠️ WARNING: Kya aap sach mein Admin Username/Password change karna chahte hain?")) return;
     try {
-      const res = await fetch(`${ADMIN_API}/change-credentials`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ oldPassword: oldPass, newUsername: newAdminUser, newPassword: newAdminPass }) });
+      const res = await fetch(`${ADMIN_API}/change-credentials`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...adminAuthHeaders() }, body: JSON.stringify({ oldPassword: oldPass, newUsername: newAdminUser, newPassword: newAdminPass }) });
       const data = await res.json(); alert(data.message);
-      if(data.success) { setOldPass(''); setNewAdminUser(''); setNewAdminPass(''); if(newAdminPass) setIsAuthenticated(false); }
-    } catch (e) { alert("Error."); }
-  };
-
-  const fetchAdminRooms = async () => { 
-    try { const res = await fetch(`${API_URL}/admin/all`, { headers: { 'x-admin-secret': 'admin-secret-29' } }); const data = await res.json(); if (data.success) setAdminRooms(data.rooms); } catch (e) {} 
-  };
-
-  const fetchSystemSettings = async () => { 
-    try { const res = await fetch(`${ADMIN_API}/settings`); const data = await res.json(); if (data.success && data.settings) { setSysCategories(data.settings.categories || []); setSysFacilities(data.settings.facilities || []); setSysPricing(data.settings.pricing || { regular: '0', promo7: '299', promo15: '499', promo30: '899', upiId: '' }); } } catch (e) {} 
+      if(data.success) { setOldPass(''); setNewAdminUser(''); setNewAdminPass(''); if(newAdminPass) { sessionStorage.removeItem('roomkhojo_admin_token'); setIsAuthenticated(false); } }
+    } catch { alert("Error."); }
   };
 
   // 🚨 SMART ERROR TRACKER (Ise Update Kiya Hai)
@@ -65,8 +82,8 @@ export default function AdminPanel() {
     try {
       const res = await fetch(`${ADMIN_API}/settings`, { 
         method: 'POST', 
-        headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify({ categories: updatedCategories || sysCategories, facilities: updatedFacilities || sysFacilities, pricing: updatedPricing || sysPricing }) 
+        headers: { 'Content-Type': 'application/json', ...adminAuthHeaders() },
+        body: JSON.stringify({ categories: updatedCategories || sysCategories, facilities: updatedFacilities || sysFacilities, pricing: updatedPricing || sysPricing })
       });
       
       const textData = await res.text(); 
@@ -77,10 +94,10 @@ export default function AdminPanel() {
           } else {
               alert("❌ Backend Error: " + data.message);
           }
-      } catch(parseErr) {
+      } catch {
           alert("❌ Server Error/Crash! Backend terminal check karein. Response: " + textData.substring(0, 100));
       }
-    } catch (e) { 
+    } catch { 
       alert("❌ Connection Error: Backend server band ho gaya hai. Apna Termux check karein."); 
     }
   };
@@ -109,8 +126,8 @@ export default function AdminPanel() {
     setSysFacilities(updated);
   };
 
-  const handleApprove = async (id) => { try { await fetch(`${API_URL}/${id}/approve`, { method: 'PATCH' }); fetchAdminRooms(); } catch (e) {} };
-  const handleDelete = async (id) => { if (!window.confirm("⚠️ Room delete karna hai? Ye action wapas nahi hoga.")) return; try { await fetch(`${API_URL}/${id}`, { method: 'DELETE' }); fetchAdminRooms(); } catch (e) {} };
+  const handleApprove = async (id) => { try { await fetch(`${API_URL}/${id}/approve`, { method: 'PATCH', headers: adminAuthHeaders() }); setRefreshKey(k => k + 1); } catch { /* approve fail: silent */ } };
+  const handleDelete = async (id) => { if (!window.confirm("⚠️ Room delete karna hai? Ye action wapas nahi hoga.")) return; try { await fetch(`${API_URL}/${id}`, { method: 'DELETE', headers: adminAuthHeaders() }); setRefreshKey(k => k + 1); } catch { /* delete fail: silent */ } };
 
   const getDaysLeft = (expiryDate, plan) => {
     if (plan === 'regular' || !plan) return <span className="text-gray-500">Lifetime</span>;
@@ -154,8 +171,8 @@ export default function AdminPanel() {
           </div>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => { fetchAdminRooms(); fetchSystemSettings(); }} className="bg-white/10 p-2 rounded-lg active:scale-95 transition-transform" title="Refresh Data"><BarChart3 size={16} /></button>
-          <button onClick={() => setIsAuthenticated(false)} className="bg-red-500/20 text-red-100 p-2 rounded-lg text-sm font-bold flex items-center gap-2 active:scale-95 transition-transform"><LogOut size={16} className="shrink-0"/> Exit</button>
+          <button onClick={() => setRefreshKey(k => k + 1)} className="bg-white/10 p-2 rounded-lg active:scale-95 transition-transform" title="Refresh Data"><BarChart3 size={16} /></button>
+          <button onClick={() => { sessionStorage.removeItem('roomkhojo_admin_token'); setIsAuthenticated(false); }} className="bg-red-500/20 text-red-100 p-2 rounded-lg text-sm font-bold flex items-center gap-2 active:scale-95 transition-transform"><LogOut size={16} className="shrink-0"/> Exit</button>
         </div>
       </header>
       
@@ -198,9 +215,9 @@ export default function AdminPanel() {
                   </div>
                 </div>
                 <div className="bg-orange-50 border border-orange-200 p-3 rounded-xl flex justify-between items-center shadow-inner">
-                  <p className="text-xs font-bold text-orange-800">Pay Code: <span className="font-black text-lg tracking-widest ml-1">{room.paymentCode || 'FREE'}</span></p>
+                  <p className="text-xs font-bold text-orange-800">Pay Code: <span className="font-black text-lg tracking-widest ml-1">{room.paymentCode || 'FREE'}</span>{room.paymentRef ? (<span className="block text-[10px] mt-0.5">UPI Ref: {room.paymentRef}</span>) : null}</p>
                   <span className="text-[10px] font-black bg-white px-2 py-1 rounded-md text-orange-600 shadow-sm border border-orange-100">
-                    {room.isPromoted ? ('⭐ Promo ' + room.promoPlan + ' Days') : 'Regular Ad'}
+                    {(room.promoRequested && room.promoRequested !== 'regular') ? ('⭐ Promo ' + room.promoRequested + ' Days — payment verify karke Approve dabayein') : 'Regular Ad'}
                   </span>
                 </div>
                 <div className="flex gap-2 mt-1">

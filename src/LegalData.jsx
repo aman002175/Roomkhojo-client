@@ -1,4 +1,3 @@
-import React from 'react';
 import { Info, FileText, Shield } from 'lucide-react';
 
 export const legalData = {

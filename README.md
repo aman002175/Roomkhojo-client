@@ -1,16 +1,39 @@
-# React + Vite
+# RoomKhojo Client (Frontend)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React 19 + Vite + Tailwind + MapLibre. Map-based room/PG finder.
 
-Currently, two official plugins are available:
+## Setup
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+```bash
+npm install
+cp .env.example .env   # values bharo
+npm run dev            # http://localhost:5173
+```
 
-## React Compiler
+## Env vars
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+| Var | Kaam |
+|---|---|
+| `VITE_API_BASE_URL` | Backend URL + `/api` (e.g. `https://xxx.vercel.app/api`) |
+| `VITE_GOOGLE_CLIENT_ID` | Google Cloud OAuth Client ID |
 
-## Expanding the ESLint configuration
+## Scripts
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+- `npm run dev` — local dev
+- `npm run build` — production build (`dist/`)
+- `npm run lint` — ESLint (clean rakho)
+
+## Routes
+
+| Path | Page |
+|---|---|
+| `/` | Map + list + post-ad |
+| `/dashboard` | User ke ads (login required) |
+| `/admin-secret-29` | Admin console (admin JWT) |
+| `/about` `/terms` `/refund` | Legal pages |
+
+## Deploy (Vercel)
+
+- Repo connect karo → auto-deploy on push (manual `dist` upload khatam).
+- Build-time env vars me `VITE_API_BASE_URL` + `VITE_GOOGLE_CLIENT_ID` set karo.
+- `public/_redirects` Netlify ke liye tha; Vercel par SPA fallback automatic hai.
