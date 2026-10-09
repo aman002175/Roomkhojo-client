@@ -29,7 +29,7 @@ npm run dev            # http://localhost:5173
 |---|---|
 | `/` | Map + list + post-ad |
 | `/dashboard` | User ke ads (login required) |
-| `/admin-secret-29` | Admin console (admin JWT) |
+| `VITE_ADMIN_PATH` (default `/admin-secret-29`) | Admin console (admin JWT) |
 | `/about` `/terms` `/refund` | Legal pages |
 
 ## Deploy (Vercel)

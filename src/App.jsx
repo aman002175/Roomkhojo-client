@@ -18,6 +18,12 @@ export default function App() {
   // 🔑 Google Client ID ab .env file se aata hai (VITE_GOOGLE_CLIENT_ID)
   const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
+  // 🔒 Admin panel ka secret path bhi env se (Vercel me badlo, repo me nahi).
+  // NOTE: ye bundle me dikhega — obscurity layer hai, asli security JWT hai.
+  // Env badalne ke baad Vercel par redeploy zaroori hai (build-time value).
+  const rawAdminPath = import.meta.env.VITE_ADMIN_PATH || '/admin-secret-29';
+  const adminPath = rawAdminPath.startsWith('/') ? rawAdminPath : `/${rawAdminPath}`;
+
   if (!googleClientId) {
     console.warn('VITE_GOOGLE_CLIENT_ID set nahi hai — Google login kaam nahi karega.');
   }
@@ -28,7 +34,7 @@ export default function App() {
         <Suspense fallback={<PageLoader />}>
           <Routes>
             <Route path="/" element={<MainApp />} />
-            <Route path="/admin-secret-29" element={<AdminPanel />} />
+            <Route path={adminPath} element={<AdminPanel />} />
             <Route path="/dashboard" element={<UserDashboard />} />
 
             {/* ── Legal Pages ── */}
