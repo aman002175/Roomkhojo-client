@@ -26,6 +26,62 @@ const TYPE_OPTIONS = {
 const DEFAULT_TYPES = ['Boys', 'Girls', 'Family', 'Anyone'];
 const typesForCategory = (cat) => TYPE_OPTIONS[cat] || DEFAULT_TYPES;
 
+// 📍 Haversine distance (meters) + format
+const distMeters = (lat1, lng1, lat2, lng2) => {
+  const R = 6371000;
+  const rad = (x) => (x * Math.PI) / 180;
+  const h = Math.sin(rad(lat2 - lat1) / 2) ** 2
+    + Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.sin(rad(lng2 - lng1) / 2) ** 2;
+  return Math.round(2 * R * Math.asin(Math.sqrt(h)));
+};
+const fmtDist = (m) => {
+  const mm = Number(m) || 0;
+  return mm < 1000 ? `${mm} m` : `${(mm / 1000).toFixed(1)} km`;
+};
+
+// OSM tags → Hindi-friendly label (null = ignore)
+const poiLabel = (tags) => {
+  if (!tags) return null;
+  if (tags.railway === 'station' || tags.railway === 'halt' || tags.public_transport === 'station') return '🚉 Railway Station';
+  if (tags.amenity === 'bus_station') return '🚌 Bus Stand';
+  if (tags.highway === 'bus_stop') return tags.name ? '🚌 Bus Stop' : null;
+  if (tags.amenity === 'hospital') return '🏥 Hospital';
+  if (tags.amenity === 'clinic' || tags.amenity === 'doctors') return '🩺 Clinic';
+  if (tags.amenity === 'training') return '📚 Coaching';
+  if (tags.amenity === 'college' || tags.amenity === 'university') return '🎓 College';
+  if (tags.amenity === 'school') return '🏫 School';
+  return null;
+};
+
+// Overpass API (free, no key): 1.5km me coaching/hospital/bus/railway dhoondo
+const fetchNearbyPOI = async (lat, lng, radius = 1500) => {
+  const q = `[out:json][timeout:25];(nwr["amenity"~"^(school|college|university|training|hospital|clinic|doctors)$"](around:${radius},${lat},${lng});nwr["highway"="bus_stop"](around:${radius},${lat},${lng});nwr["amenity"="bus_station"](around:${radius},${lat},${lng});nwr["railway"~"^(station|halt)$"](around:${radius},${lat},${lng}););out center 20;`;
+  const res = await fetch('https://overpass.kumi.systems/api/interpreter', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: 'data=' + encodeURIComponent(q)
+  });
+  const data = await res.json();
+  const seen = new Set();
+  return (data.elements || [])
+    .map((el) => {
+      const tags = el.tags || {};
+      if (!tags.name) return null;
+      const plat = el.lat !== undefined ? el.lat : (el.center && el.center.lat);
+      const plng = el.lon !== undefined ? el.lon : (el.center && el.center.lon);
+      if (!Number.isFinite(plat) || !Number.isFinite(plng)) return null;
+      const cat = poiLabel(tags);
+      if (!cat) return null;
+      const key = `${tags.name}|${plat.toFixed(5)}|${plng.toFixed(5)}`;
+      if (seen.has(key)) return null;
+      seen.add(key);
+      return { name: tags.name, cat, lat: plat, lng: plng, distM: distMeters(lat, lng, plat, plng) };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.distM - b.distM)
+    .slice(0, 30);
+};
+
 // Logged-in API calls ke liye Bearer header
 const authHeaders = () => {
   const token = localStorage.getItem('roomkhojo_token');
@@ -85,6 +141,11 @@ export default function MainApp() {
   const [forgotOtp, setForgotOtp] = useState('');
   const [forgotNewPass, setForgotNewPass] = useState('');
   const [forgotResetToken, setForgotResetToken] = useState('');
+  // 📍 POI picker states
+  const [poiOpen, setPoiOpen] = useState(false);
+  const [poiLoading, setPoiLoading] = useState(false);
+  const [poiList, setPoiList] = useState([]);
+  const [poiSelected, setPoiSelected] = useState([]);
 
   const [sysSettings, setSysSettings] = useState({
     categories: ['PG', 'Flat', 'Hostel', 'Library', 'Office'],
@@ -251,13 +312,14 @@ export default function MainApp() {
       fd.append('paymentRef', payRef.trim());
       fd.append('bannerRequested', wantBanner);
       fd.append('bannerRef', payRef.trim());
+      fd.append('landmarks', JSON.stringify(poiSelected));
       if (postImage) fd.append('image', postImage);
 
       // NOTE: userId/ownerName/paymentCode server token se leta hai (spoof-proof).
       const res = await fetch(API_URL, { method: 'POST', headers: authHeaders(), body: fd }); const data = await res.json();
       if(data.success) { 
         alert("🎉 " + (data.message || 'Ad submitted!')); 
-        setIsPostAdOpen(false); setShowPaymentWindow(false); setPostTitle(''); setPostPrice(''); setPostMobile(''); setSelectedFacilities([]); setPostLng(null); setPostLat(null); setPostImage(null); setPayRef(''); setWantBanner(false); 
+        setIsPostAdOpen(false); setShowPaymentWindow(false); setPostTitle(''); setPostPrice(''); setPostMobile(''); setSelectedFacilities([]); setPostLng(null); setPostLat(null); setPostImage(null); setPayRef(''); setWantBanner(false); setPoiSelected([]); 
       }
     } catch { alert("Server connection failed."); }
     setIsSubmitting(false);
@@ -265,7 +327,8 @@ export default function MainApp() {
 
   useEffect(() => {
     if (map.current) return;
-    map.current = new maplibregl.Map({ container: mapContainer.current, style: { version: 8, sources: { 'osm': { type: 'raster', tiles: ['https://a.tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256 } }, layers: [{ id: 'osm', type: 'raster', source: 'osm' }] }, center: [74.3218, 29.5894], zoom: 13, attributionControl: false });
+    // 🗺️ OpenFreeMap vector style (free, no key, modern) — puraana OSM raster hataya
+    map.current = new maplibregl.Map({ container: mapContainer.current, style: 'https://tiles.openfreemap.org/styles/liberty', center: [74.3218, 29.5894], zoom: 13, attributionControl: { compact: true } });
   }, []);
 
   const filteredRooms = rooms.filter(r => {
@@ -289,6 +352,37 @@ export default function MainApp() {
     const t = setInterval(() => setBannerIndex(i => (i + 1) % bannerRooms.length), 4000);
     return () => clearInterval(t);
   }, [bannerRooms.length]);
+
+  // 📍 POI modal: pinned location (ya map center) ke aas-paas dhoondo
+  const openPoiPicker = async () => {
+    let lat = postLat;
+    let lng = postLng;
+    if ((lat === null || lat === undefined) && map.current) {
+      const c = map.current.getCenter();
+      lat = c.lat; lng = c.lng;
+    }
+    if (lat === null || lat === undefined || lng === null || lng === undefined) {
+      return alert('📍 Pehle Map button se location pin karein, phir landmarks dekhein.');
+    }
+    setPoiOpen(true);
+    setPoiLoading(true);
+    setPoiList([]);
+    try {
+      setPoiList(await fetchNearbyPOI(lat, lng));
+    } catch {
+      alert('Nearby jagah load nahi hui. Internet check karke dobara try karein.');
+    }
+    setPoiLoading(false);
+  };
+
+  const togglePoi = (poi) => {
+    setPoiSelected(prev => {
+      const exists = prev.some(p => p.name === poi.name && p.lat === poi.lat && p.lng === poi.lng);
+      if (exists) return prev.filter(p => !(p.name === poi.name && p.lat === poi.lat && p.lng === poi.lng));
+      if (prev.length >= 5) { alert('Max 5 landmarks select kar sakte ho.'); return prev; }
+      return [...prev, poi];
+    });
+  };
 
   const handleReportUnavailable = async (roomId) => {
     try {
@@ -392,6 +486,7 @@ export default function MainApp() {
                 <div className="p-4">
                   <div className="flex justify-between items-start mb-1"><h3 className="font-bold text-gray-900 text-lg leading-tight">{room.title}</h3><span className="bg-gray-100 text-gray-600 px-2 py-1 rounded-lg text-[10px] font-black shrink-0 ml-2">{room.type} • {room.category}</span></div>
                   <p className="text-sm font-bold text-gray-500">📍 {room.landmark || 'Hanumangarh'}</p>
+                  {Array.isArray(room.landmarks) && room.landmarks.length > 0 && (<p className="text-[11px] font-bold text-purple-700 mt-1">🏛️ {room.landmarks.slice(0, 3).map(l => `${l.name} (${fmtDist(l.distM)})`).join(' • ')}{room.landmarks.length > 3 ? ` +${room.landmarks.length - 3} aur` : ''}</p>)}
                   <div className="flex gap-2 mt-3 items-center">
                     <button onClick={() => handleReportUnavailable(room._id)} className="text-[10px] bg-red-50 text-red-600 px-2 py-1.5 rounded-lg font-bold border border-red-100 active:scale-95">Unavailable?</button>
                   </div>
@@ -407,6 +502,7 @@ export default function MainApp() {
             <button onClick={() => setSelectedRoom(null)} className="absolute -top-3 -right-3 w-8 h-8 bg-white shadow-lg rounded-full flex items-center justify-center text-gray-600"><X size={18}/></button>
             <div className="flex gap-4 mb-3"><img src={getImageUrl(selectedRoom.image)} className="w-20 h-20 object-cover rounded-2xl bg-gray-200 shrink-0" alt="Room" /><div className="flex-1"><div className="flex justify-between items-start"><h3 className="font-black text-gray-800 line-clamp-1">{selectedRoom.title}</h3><span className="bg-brand/10 text-brand px-2 py-1 rounded-lg text-[10px] font-black shrink-0 ml-1">{selectedRoom.category}</span></div><p className="text-brand font-black text-xl leading-none mt-1">{selectedRoom.price}</p><p className="text-[11px] font-bold text-gray-500 mt-1.5 flex items-center gap-1"><User size={12}/> {selectedRoom.ownerName || 'Owner'} <span className="mx-1">•</span> <Phone size={12}/> {selectedRoom.mobile}</p></div></div>
             {selectedRoom.description && (<div className="flex flex-wrap gap-1.5 mb-3 pt-2 border-t border-gray-50">{selectedRoom.description.split(', ').map(fac => (<span key={fac} className="bg-gray-50 text-gray-600 border px-2 py-1 rounded-md text-[9px] font-bold uppercase">{fac}</span>))}</div>)}
+            {Array.isArray(selectedRoom.landmarks) && selectedRoom.landmarks.length > 0 && (<div className="bg-purple-50 border border-purple-100 rounded-xl p-2.5 mb-3"><p className="text-[10px] font-black text-purple-700 uppercase mb-1">📍 Aas-paas ki jagah</p>{selectedRoom.landmarks.map((l, i) => (<p key={i} className="text-[11px] font-bold text-gray-700">{l.cat} {l.name} — <span className="text-purple-700">{fmtDist(l.distM)}</span></p>))}</div>)}
             <div className="flex gap-2 items-center mb-3">
               <button onClick={() => handleReportUnavailable(selectedRoom._id)} className="text-[10px] bg-red-50 text-red-600 px-2 py-1 rounded border border-red-100 active:scale-95 font-bold shrink-0">Unavailable?</button>
             </div>
@@ -434,7 +530,8 @@ export default function MainApp() {
               <div className={`flex items-center justify-between p-3 rounded-2xl border-2 transition-colors ${wantBanner ? 'bg-purple-50 border-purple-400' : 'bg-gray-50 border-transparent'}`}><div><p className="text-sm font-black text-gray-800">🎯 Top Banner Add-on</p><p className="text-[11px] font-bold text-gray-500">₹{sysSettings.pricing.bannerPrice || '499'} • {sysSettings.pricing.bannerDays || '7'} din top strip par (paid)</p></div><button type="button" onClick={() => setWantBanner(!wantBanner)} className={`w-12 h-7 rounded-full font-black text-[10px] transition-colors ${wantBanner ? 'bg-purple-600 text-white' : 'bg-gray-300 text-gray-500'}`}>{wantBanner ? 'ON' : 'OFF'}</button></div>
              <div className="space-y-3"><input type="text" value={postTitle} onChange={(e) => setPostTitle(e.target.value)} placeholder="Title" className="w-full p-4 bg-gray-50 rounded-2xl outline-none font-bold text-sm" /><div className="flex gap-3"><select value={postCategory} onChange={(e) => { setPostCategory(e.target.value); const opts = typesForCategory(e.target.value); setPostType(opts[0]); }} className="flex-1 p-4 bg-gray-50 rounded-2xl outline-none font-bold text-sm">{sysSettings.categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}</select><select value={postType} onChange={(e) => setPostType(e.target.value)} className="flex-1 p-4 bg-gray-50 rounded-2xl outline-none font-bold text-sm">{typesForCategory(postCategory).map(t => <option key={t} value={t}>{t}</option>)}</select></div><div className="flex gap-3"><input type="number" value={postPrice} onChange={(e) => setPostPrice(e.target.value)} placeholder="Rent (₹)/Month" className="flex-1 p-4 bg-gray-50 rounded-2xl outline-none font-bold text-sm"/><input type="number" value={postMobile} onChange={(e) => setPostMobile(e.target.value)} placeholder="Mobile No." className="flex-[1.5] p-4 bg-gray-50 rounded-2xl outline-none font-bold text-sm"/></div></div>
              <div><p className="text-xs font-black text-gray-500 mb-2 uppercase">Select Facilities</p><div className="flex flex-wrap gap-2">{(sysSettings.facilities || []).map(fac => (<button type="button" key={fac} onClick={() => setSelectedFacilities(prev => prev.includes(fac) ? prev.filter(f => f !== fac) : [...prev, fac])} className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${selectedFacilities.includes(fac) ? 'bg-brand text-white border-brand shadow-md' : 'bg-gray-50 text-gray-500 border-gray-200'}`}>{fac}</button>))}</div></div>
-             <div className="flex gap-3 mt-2"><input type="text" value={postLandmark} onChange={(e) => setPostLandmark(e.target.value)} placeholder="Landmark" className="flex-1 p-4 bg-gray-50 rounded-2xl outline-none font-bold text-sm"/><button onClick={() => { setIsPostAdOpen(false); setIsPickingLocation(true); setView('map'); handleLiveLocation(); }} className={`p-3 rounded-2xl font-black text-xs flex items-center justify-center gap-1 border-2 transition-colors ${postLng ? 'bg-green-50 text-green-600 border-green-200' : 'bg-blue-50 text-blue-600 border-blue-200'}`}><Target size={16}/> {postLng ? 'Pinned!' : 'Map'}</button></div>
+              <div className="flex gap-3 mt-2"><input type="text" value={postLandmark} onChange={(e) => setPostLandmark(e.target.value)} placeholder="Landmark" className="flex-1 p-4 bg-gray-50 rounded-2xl outline-none font-bold text-sm"/><button onClick={() => { setIsPostAdOpen(false); setIsPickingLocation(true); setView('map'); handleLiveLocation(); }} className={`p-3 rounded-2xl font-black text-xs flex items-center justify-center gap-1 border-2 transition-colors ${postLng ? 'bg-green-50 text-green-600 border-green-200' : 'bg-blue-50 text-blue-600 border-blue-200'}`}><Target size={16}/> {postLng ? 'Pinned!' : 'Map'}</button><button onClick={openPoiPicker} className="p-3 rounded-2xl font-black text-xs flex items-center justify-center gap-1 border-2 transition-colors bg-purple-50 text-purple-700 border-purple-200 active:scale-95">🏛️ Nearby</button></div>
+              {poiSelected.length > 0 && (<div className="flex flex-wrap gap-2 mt-2">{poiSelected.map((p, i) => (<span key={`${p.name}-${i}`} className="bg-purple-50 text-purple-700 border border-purple-200 px-2 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1">{p.cat} {p.name} • {fmtDist(p.distM)}<button type="button" onClick={() => setPoiSelected(prev => prev.filter((_, j) => j !== i))} className="text-purple-400 font-black ml-1">✕</button></span>))}</div>)}
           </div>
           <div className="p-4 border-t bg-white sticky bottom-0 z-10">
             <button onClick={initiatePayment} disabled={isSubmitting} className={`w-full py-4 rounded-2xl font-black text-lg shadow-lg flex items-center justify-center gap-2 ${adType === 'promo' ? 'bg-orange-500 text-white' : 'bg-brand text-white'}`}>
@@ -455,6 +552,27 @@ export default function MainApp() {
               <input type="text" value={payRef} onChange={(e) => setPayRef(e.target.value)} placeholder="UPI Ref / UTR No. (payment ke baad milta hai)" className="w-full p-4 bg-gray-50 rounded-2xl outline-none font-bold text-sm mb-3 border" />
               <button onClick={() => submitAd()} disabled={isSubmitting} className="w-full bg-green-50 text-green-700 py-4 rounded-2xl font-black flex items-center justify-center border border-green-200 active:scale-95 transition-transform">{isSubmitting ? 'Verifying...' : '✅ I have completed the payment'}</button>
               <button onClick={() => setShowPaymentWindow(false)} className="mt-4 text-sm font-bold text-gray-400 underline">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 📍 POI PICKER MODAL (nearby landmarks select) */}
+      {poiOpen && (
+        <div className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4">
+          <div className="bg-white w-full max-w-md rounded-t-[30px] sm:rounded-3xl flex flex-col h-[80dvh] sm:h-auto sm:max-h-[80dvh] shadow-2xl relative">
+            <div className="p-5 border-b shrink-0 flex justify-between items-center sticky top-0 bg-white rounded-t-[30px] sm:rounded-t-3xl z-10">
+              <div><h2 className="text-xl font-black">📍 Aas-paas ki jagah</h2><p className="text-[11px] font-bold text-gray-500">1.5 km ke andar • max 5 select</p></div>
+              <button onClick={() => setPoiOpen(false)} className="bg-gray-100 p-2 rounded-full active:scale-90"><X size={20}/></button>
+            </div>
+            <div className="p-5 overflow-y-auto space-y-2 flex-1">
+              {poiLoading ? (<p className="text-center text-gray-500 font-bold p-8">Dhoondh rahe hain… 🔍</p>) : poiList.length === 0 ? (<p className="text-center text-gray-500 font-bold p-8">1.5 km me koi coaching/hospital/bus/railway nahi mila.</p>) : (poiList.map((poi, i) => {
+                const sel = poiSelected.some(p => p.name === poi.name && p.lat === poi.lat && p.lng === poi.lng);
+                return (<button key={`${poi.name}-${i}`} onClick={() => togglePoi(poi)} className={`w-full flex items-center justify-between p-3 rounded-2xl border-2 text-left active:scale-[0.98] transition-all ${sel ? 'bg-purple-600 text-white border-purple-600 shadow-lg' : 'bg-gray-50 border-transparent'}`}><div className="flex-1 min-w-0"><p className="font-black text-sm leading-tight truncate">{poi.cat} {poi.name}</p><p className={`text-[11px] font-bold ${sel ? 'text-purple-100' : 'text-gray-500'}`}>📏 {fmtDist(poi.distM)} door</p></div><span className="text-xl shrink-0 ml-2">{sel ? '✅' : '⭕'}</span></button>);
+              }))}
+            </div>
+            <div className="p-4 border-t bg-white sticky bottom-0 z-10 shrink-0">
+              <button onClick={() => setPoiOpen(false)} className="w-full bg-brand text-white py-4 rounded-xl font-black shadow-lg active:scale-95">Done ({poiSelected.length} selected)</button>
             </div>
           </div>
         </div>
