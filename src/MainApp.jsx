@@ -37,10 +37,25 @@ const MAP_STYLE = {
       tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}'],
       tileSize: 256,
       attribution: 'Powered by Esri | © OpenStreetMap contributors',
-      maxzoom: 19
+      maxzoom: 17 // z18+ par is area me data nahi (placeholder aata hai) — overzoom karega
     }
   },
   layers: [{ id: 'esri', type: 'raster', source: 'esri' }]
+};
+
+// 🛰️ Satellite view (deep zoom tak coverage — street me gap ho toh ye kaam aayega)
+const SAT_STYLE = {
+  version: 8,
+  sources: {
+    esriSat: {
+      type: 'raster',
+      tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
+      tileSize: 256,
+      attribution: 'Imagery © Esri, Maxar, Earthstar Geographics',
+      maxzoom: 18
+    }
+  },
+  layers: [{ id: 'esriSat', type: 'raster', source: 'esriSat' }]
 };
 
 // 📍 Haversine distance (meters) + format
@@ -174,6 +189,15 @@ export default function MainApp() {
   const [mapLoaded, setMapLoaded] = useState(false);
   // WebGL nahi (Brave Shields/purana browser) toh map kabhi nahi chalega — render-time check
   const [mapDead] = useState(() => (maplibregl.supported ? !maplibregl.supported() : false));
+  // Street / Satellite toggle
+  const [mapStyle, setMapStyle] = useState('street');
+
+  const switchMapStyle = (s) => {
+    setMapStyle(s);
+    if (map.current) {
+      try { map.current.setStyle(s === 'sat' ? SAT_STYLE : MAP_STYLE); } catch { /* ignore */ }
+    }
+  };
 
   const [sysSettings, setSysSettings] = useState({
     categories: ['PG', 'Flat', 'Hostel', 'Library', 'Office'],
@@ -355,7 +379,7 @@ export default function MainApp() {
 
   useEffect(() => {
     if (map.current || mapDead) return;
-    map.current = new maplibregl.Map({ container: mapContainer.current, style: MAP_STYLE, center: [74.3218, 29.5894], zoom: 13, attributionControl: { compact: true } });
+    map.current = new maplibregl.Map({ container: mapContainer.current, style: MAP_STYLE, center: [74.3218, 29.5894], zoom: 13, maxZoom: 18, attributionControl: { compact: true } });
     map.current.on('load', () => setMapLoaded(true));
   }, [mapDead]);
 
@@ -531,6 +555,7 @@ export default function MainApp() {
         })()}
         <div className={`absolute inset-0 transition-opacity duration-500 ${view === 'map' ? 'opacity-100 z-10' : 'opacity-0 z-0'}`}><div ref={mapContainer} className="w-full h-full" /></div>
         {view === 'map' && !isPickingLocation && (<button onClick={handleLiveLocation} className="absolute bottom-28 right-4 z-40 bg-white p-3 rounded-full shadow-xl border border-gray-100 text-brand active:scale-90 transition-transform"><Navigation size={24} fill="currentColor"/></button>)}
+        {view === 'map' && (<button onClick={() => switchMapStyle(mapStyle === 'street' ? 'sat' : 'street')} className="absolute left-4 bottom-28 z-40 bg-white px-3 py-2 rounded-full shadow-xl border border-gray-100 text-xs font-black text-gray-700 flex items-center gap-1.5 active:scale-90 transition-transform">{mapStyle === 'street' ? '🛰️ Satellite' : '🗺️ Street'}</button>)}
         {view === 'map' && isPickingLocation && (<button onClick={handleLiveLocation} className="absolute bottom-[90px] right-4 z-40 bg-white px-4 py-2.5 rounded-full shadow-xl border border-gray-100 text-brand font-black text-xs flex items-center gap-2 active:scale-90 transition-transform"><Navigation size={16} fill="currentColor"/> My Location</button>)}
         {isPickingLocation && view === 'map' && (
           <div className="absolute inset-0 z-30 pointer-events-none">
