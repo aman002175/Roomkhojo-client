@@ -82,6 +82,13 @@ const fetchNearbyPOI = async (lat, lng, radius = 1500) => {
     .slice(0, 30);
 };
 
+// Room gallery: images[] ho toh wahi, warna puraani single image
+const roomGallery = (room) => {
+  if (room && Array.isArray(room.images) && room.images.length > 0) return room.images.filter(Boolean);
+  if (room && room.image) return [room.image];
+  return [];
+};
+
 // Logged-in API calls ke liye Bearer header
 const authHeaders = () => {
   const token = localStorage.getItem('roomkhojo_token');
@@ -127,7 +134,7 @@ export default function MainApp() {
   const [postMobile, setPostMobile] = useState('');
   const [selectedFacilities, setSelectedFacilities] = useState([]); 
   const [postLandmark, setPostLandmark] = useState('');
-  const [postImage, setPostImage] = useState(null); 
+  const [postImages, setPostImages] = useState([]); // [{file, url}] max 6 
   const [postLng, setPostLng] = useState(null);
   const [postLat, setPostLat] = useState(null); 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -313,13 +320,13 @@ export default function MainApp() {
       fd.append('bannerRequested', wantBanner);
       fd.append('bannerRef', payRef.trim());
       fd.append('landmarks', JSON.stringify(poiSelected));
-      if (postImage) fd.append('image', postImage);
+      postImages.forEach(p => fd.append('images', p.file));
 
       // NOTE: userId/ownerName/paymentCode server token se leta hai (spoof-proof).
       const res = await fetch(API_URL, { method: 'POST', headers: authHeaders(), body: fd }); const data = await res.json();
       if(data.success) { 
         alert("🎉 " + (data.message || 'Ad submitted!')); 
-        setIsPostAdOpen(false); setShowPaymentWindow(false); setPostTitle(''); setPostPrice(''); setPostMobile(''); setSelectedFacilities([]); setPostLng(null); setPostLat(null); setPostImage(null); setPayRef(''); setWantBanner(false); setPoiSelected([]); 
+        setIsPostAdOpen(false); setShowPaymentWindow(false); setPostTitle(''); setPostPrice(''); setPostMobile(''); setSelectedFacilities([]); setPostLng(null); setPostLat(null); clearPostPhotos(); setPayRef(''); setWantBanner(false); setPoiSelected([]); 
       }
     } catch { alert("Server connection failed."); }
     setIsSubmitting(false);
@@ -381,6 +388,30 @@ export default function MainApp() {
       if (exists) return prev.filter(p => !(p.name === poi.name && p.lat === poi.lat && p.lng === poi.lng));
       if (prev.length >= 5) { alert('Max 5 landmarks select kar sakte ho.'); return prev; }
       return [...prev, poi];
+    });
+  };
+
+  // 📸 Multi-photo picker (max 6) + remove
+  const addPostPhotos = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (postImages.length + files.length > 6) alert('Max 6 photos allowed hai.');
+    const mapped = files.map(f => ({ file: f, url: URL.createObjectURL(f) }));
+    setPostImages(prev => [...prev, ...mapped].slice(0, 6));
+    e.target.value = '';
+  };
+
+  const removePostPhoto = (idx) => {
+    setPostImages(prev => {
+      const item = prev[idx];
+      if (item && item.url) URL.revokeObjectURL(item.url);
+      return prev.filter((_, j) => j !== idx);
+    });
+  };
+
+  const clearPostPhotos = () => {
+    setPostImages(prev => {
+      prev.forEach(p => { if (p.url) URL.revokeObjectURL(p.url); });
+      return [];
     });
   };
 
@@ -450,12 +481,12 @@ export default function MainApp() {
           const b = bannerRooms[bannerIndex % bannerRooms.length];
           return (
             <div className="absolute top-2 left-2 right-2 z-30">
-              <div onClick={() => { setSelectedRoom(b); setView('map'); if (map.current) map.current.flyTo({ center: [b.lng, b.lat], zoom: 15.5 }); }} className="bg-white/95 backdrop-blur rounded-2xl shadow-xl border border-purple-200 p-2 flex items-center gap-3 active:scale-[0.98] transition-transform cursor-pointer">
-                <img src={getImageUrl(b.image)} className="w-14 h-14 rounded-xl object-cover bg-gray-200 shrink-0" alt="Sponsored" />
+              <div onClick={() => { setSelectedRoom(b); setView('map'); if (map.current) map.current.flyTo({ center: [b.lng, b.lat], zoom: 15.5 }); }} className="bg-white/95 backdrop-blur rounded-xl shadow-lg border border-purple-200 px-2 py-1.5 flex items-center gap-2 active:scale-[0.98] transition-transform cursor-pointer">
+                <img src={getImageUrl(b.image)} className="w-11 h-11 rounded-lg object-cover bg-gray-200 shrink-0" alt="Sponsored" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-[9px] font-black text-purple-600 uppercase tracking-wider">⭐ Sponsored</p>
-                  <p className="font-black text-gray-800 text-sm leading-tight truncate">{b.title}</p>
-                  <p className="text-brand font-black text-sm">{b.price} <span className="text-[10px] text-gray-400 font-bold">• {b.category} • {b.type}</span></p>
+                  <p className="text-[8px] font-black text-purple-600 uppercase tracking-wider">⭐ Sponsored</p>
+                  <p className="font-black text-gray-800 text-[13px] leading-tight truncate">{b.title}</p>
+                  <p className="text-brand font-black text-[13px]">{b.price} <span className="text-[10px] text-gray-400 font-bold">• {b.category} • {b.type}</span></p>
                 </div>
                 <div className="flex gap-1 pr-1 shrink-0">
                   {bannerRooms.map((_, i) => (<span key={i} className={`w-1.5 h-1.5 rounded-full ${i === (bannerIndex % bannerRooms.length) ? 'bg-purple-600' : 'bg-gray-300'}`} />))}
@@ -498,9 +529,9 @@ export default function MainApp() {
         </div>
 
         {selectedRoom && view === 'map' && !isPickingLocation && (
-          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-[92%] bg-white rounded-3xl shadow-2xl z-[100] p-4 border border-gray-100">
+            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-[92%] max-h-[46dvh] overflow-y-auto bg-white rounded-3xl shadow-2xl z-[100] p-4 border border-gray-100">
             <button onClick={() => setSelectedRoom(null)} className="absolute -top-3 -right-3 w-8 h-8 bg-white shadow-lg rounded-full flex items-center justify-center text-gray-600"><X size={18}/></button>
-            <div className="flex gap-4 mb-3"><img src={getImageUrl(selectedRoom.image)} className="w-20 h-20 object-cover rounded-2xl bg-gray-200 shrink-0" alt="Room" /><div className="flex-1"><div className="flex justify-between items-start"><h3 className="font-black text-gray-800 line-clamp-1">{selectedRoom.title}</h3><span className="bg-brand/10 text-brand px-2 py-1 rounded-lg text-[10px] font-black shrink-0 ml-1">{selectedRoom.category}</span></div><p className="text-brand font-black text-xl leading-none mt-1">{selectedRoom.price}</p><p className="text-[11px] font-bold text-gray-500 mt-1.5 flex items-center gap-1"><User size={12}/> {selectedRoom.ownerName || 'Owner'} <span className="mx-1">•</span> <Phone size={12}/> {selectedRoom.mobile}</p></div></div>
+            <div className="flex gap-4 mb-3"><div className="flex gap-2 overflow-x-auto shrink-0 max-w-[45%] no-scrollbar">{roomGallery(selectedRoom).map((u, i) => (<img key={i} src={getImageUrl(u)} className="w-20 h-20 object-cover rounded-2xl bg-gray-200 shrink-0 border border-gray-100" alt={`Room ${i + 1}`} />))}</div><div className="flex-1"><div className="flex justify-between items-start"><h3 className="font-black text-gray-800 line-clamp-1">{selectedRoom.title}</h3><span className="bg-brand/10 text-brand px-2 py-1 rounded-lg text-[10px] font-black shrink-0 ml-1">{selectedRoom.category}</span></div><p className="text-brand font-black text-xl leading-none mt-1">{selectedRoom.price}</p><p className="text-[11px] font-bold text-gray-500 mt-1.5 flex items-center gap-1"><User size={12}/> {selectedRoom.ownerName || 'Owner'} <span className="mx-1">•</span> <Phone size={12}/> {selectedRoom.mobile}</p></div></div>
             {selectedRoom.description && (<div className="flex flex-wrap gap-1.5 mb-3 pt-2 border-t border-gray-50">{selectedRoom.description.split(', ').map(fac => (<span key={fac} className="bg-gray-50 text-gray-600 border px-2 py-1 rounded-md text-[9px] font-bold uppercase">{fac}</span>))}</div>)}
             {Array.isArray(selectedRoom.landmarks) && selectedRoom.landmarks.length > 0 && (<div className="bg-purple-50 border border-purple-100 rounded-xl p-2.5 mb-3"><p className="text-[10px] font-black text-purple-700 uppercase mb-1">📍 Aas-paas ki jagah</p>{selectedRoom.landmarks.map((l, i) => (<p key={i} className="text-[11px] font-bold text-gray-700">{l.cat} {l.name} — <span className="text-purple-700">{fmtDist(l.distM)}</span></p>))}</div>)}
             <div className="flex gap-2 items-center mb-3">
@@ -526,7 +557,10 @@ export default function MainApp() {
           <div className="p-5 overflow-y-auto space-y-5 flex-1">
              <div className="flex bg-gray-100 p-1 rounded-2xl border"><button onClick={() => setAdType('regular')} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all shadow-sm ${adType === 'regular' ? 'bg-white text-gray-900 border' : 'text-gray-400'}`}>Standard Ad</button><button onClick={() => setAdType('promo')} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all shadow-md ${adType === 'promo' ? 'bg-orange-500 text-white' : 'text-gray-400'}`}>⭐ Promoted Ad</button></div>
              {adType === 'promo' && (<div className="flex gap-2"><button onClick={() => setPromoPlan('7')} className={`flex-1 p-2 rounded-xl border text-xs font-bold transition-colors ${promoPlan === '7' ? 'bg-orange-50 border-orange-500 text-orange-600' : 'bg-gray-50 border-transparent text-gray-500'}`}>7 Days<br/><span className="text-lg">₹{sysSettings.pricing.promo7}</span></button><button onClick={() => setPromoPlan('15')} className={`flex-1 p-2 rounded-xl border text-xs font-bold transition-colors ${promoPlan === '15' ? 'bg-orange-50 border-orange-500 text-orange-600' : 'bg-gray-50 border-transparent text-gray-500'}`}>15 Days<br/><span className="text-lg">₹{sysSettings.pricing.promo15}</span></button><button onClick={() => setPromoPlan('30')} className={`flex-1 p-2 rounded-xl border text-xs font-bold transition-colors ${promoPlan === '30' ? 'bg-orange-50 border-orange-500 text-orange-600' : 'bg-gray-50 border-transparent text-gray-500'}`}>30 Days<br/><span className="text-lg">₹{sysSettings.pricing.promo30}</span></button></div>)}
-              <div><label className="bg-brand/5 h-24 rounded-2xl border-2 border-dashed border-brand/30 flex flex-col items-center justify-center gap-2 text-brand cursor-pointer"><Camera size={24}/><span className="font-bold text-xs">{postImage ? 'Image Selected' : 'Upload Photo'}</span><input type="file" className="hidden" onChange={(e) => setPostImage(e.target.files[0])} accept="image/*" /></label></div>
+              <div>
+                <label className="bg-brand/5 h-24 rounded-2xl border-2 border-dashed border-brand/30 flex flex-col items-center justify-center gap-2 text-brand cursor-pointer"><Camera size={24}/><span className="font-bold text-xs">{postImages.length > 0 ? `${postImages.length}/6 Photos Selected` : 'Upload Photos (max 6)'}</span><input type="file" className="hidden" multiple accept="image/*" onChange={addPostPhotos} /></label>
+                {postImages.length > 0 && (<div className="grid grid-cols-3 gap-2 mt-2">{postImages.map((p, i) => (<div key={i} className="relative"><img src={p.url} className="w-full h-20 rounded-xl object-cover border border-gray-200" alt={`Photo ${i + 1}`} /><button type="button" onClick={() => removePostPhoto(i)} className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full text-xs font-black flex items-center justify-center shadow">✕</button><span className="absolute bottom-1 left-1 bg-black/60 text-white text-[10px] font-black px-1.5 py-0.5 rounded">{i + 1}</span></div>))}</div>)}
+              </div>
               <div className={`flex items-center justify-between p-3 rounded-2xl border-2 transition-colors ${wantBanner ? 'bg-purple-50 border-purple-400' : 'bg-gray-50 border-transparent'}`}><div><p className="text-sm font-black text-gray-800">🎯 Top Banner Add-on</p><p className="text-[11px] font-bold text-gray-500">₹{sysSettings.pricing.bannerPrice || '499'} • {sysSettings.pricing.bannerDays || '7'} din top strip par (paid)</p></div><button type="button" onClick={() => setWantBanner(!wantBanner)} className={`w-12 h-7 rounded-full font-black text-[10px] transition-colors ${wantBanner ? 'bg-purple-600 text-white' : 'bg-gray-300 text-gray-500'}`}>{wantBanner ? 'ON' : 'OFF'}</button></div>
              <div className="space-y-3"><input type="text" value={postTitle} onChange={(e) => setPostTitle(e.target.value)} placeholder="Title" className="w-full p-4 bg-gray-50 rounded-2xl outline-none font-bold text-sm" /><div className="flex gap-3"><select value={postCategory} onChange={(e) => { setPostCategory(e.target.value); const opts = typesForCategory(e.target.value); setPostType(opts[0]); }} className="flex-1 p-4 bg-gray-50 rounded-2xl outline-none font-bold text-sm">{sysSettings.categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}</select><select value={postType} onChange={(e) => setPostType(e.target.value)} className="flex-1 p-4 bg-gray-50 rounded-2xl outline-none font-bold text-sm">{typesForCategory(postCategory).map(t => <option key={t} value={t}>{t}</option>)}</select></div><div className="flex gap-3"><input type="number" value={postPrice} onChange={(e) => setPostPrice(e.target.value)} placeholder="Rent (₹)/Month" className="flex-1 p-4 bg-gray-50 rounded-2xl outline-none font-bold text-sm"/><input type="number" value={postMobile} onChange={(e) => setPostMobile(e.target.value)} placeholder="Mobile No." className="flex-[1.5] p-4 bg-gray-50 rounded-2xl outline-none font-bold text-sm"/></div></div>
              <div><p className="text-xs font-black text-gray-500 mb-2 uppercase">Select Facilities</p><div className="flex flex-wrap gap-2">{(sysSettings.facilities || []).map(fac => (<button type="button" key={fac} onClick={() => setSelectedFacilities(prev => prev.includes(fac) ? prev.filter(f => f !== fac) : [...prev, fac])} className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${selectedFacilities.includes(fac) ? 'bg-brand text-white border-brand shadow-md' : 'bg-gray-50 text-gray-500 border-gray-200'}`}>{fac}</button>))}</div></div>

@@ -25,7 +25,8 @@ export default function UserDashboard() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingRoomId, setEditingRoomId] = useState(null);
   const [editForm, setEditForm] = useState({ title: '', price: '', type: 'Boys', category: 'PG', landmark: '', mobile: '', description: [] });
-  const [editImage, setEditImage] = useState(null);
+  const [editKeep, setEditKeep] = useState([]); // mevcut URLs (✕ se hatao)
+  const [editNew, setEditNew] = useState([]); // nayi files [{file, url}]
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [sysSettings, setSysSettings] = useState({ facilities: ['Wi-Fi', 'AC', 'Water 24x7', 'Electricity', 'Geyser', 'RO Water', 'Parking', 'CCTV', 'Meals', 'Attached Washroom'] });
 
@@ -80,7 +81,8 @@ export default function UserDashboard() {
       category: room.category, landmark: room.landmark, mobile: room.mobile, description: facilities
     });
     setEditingRoomId(room._id);
-    setEditImage(null);
+    setEditKeep(room.images && room.images.length > 0 ? [...room.images] : (room.image ? [room.image] : []));
+    setEditNew([]);
     setIsEditModalOpen(true);
   };
 
@@ -93,7 +95,8 @@ export default function UserDashboard() {
       fd.append('title', editForm.title); fd.append('price', `₹${editForm.price}`); fd.append('type', editForm.type);
       fd.append('category', editForm.category); fd.append('landmark', editForm.landmark); fd.append('mobile', editForm.mobile);
       fd.append('description', editForm.description.join(', '));
-      if (editImage) fd.append('image', editImage);
+      fd.append('keepImages', JSON.stringify(editKeep));
+      editNew.forEach(p => fd.append('images', p.file));
 
       const res = await fetch(`${BASE_URL}/api/rooms/${editingRoomId}/edit`, { method: 'PUT', headers: authHeaders(), body: fd });
       const data = await res.json();
@@ -105,6 +108,15 @@ export default function UserDashboard() {
       }
     } catch { alert("Error saving edits."); }
     setIsSubmitting(false);
+  };
+
+  // 📸 Edit gallery me nayi photos add (max 6 total)
+  const addEditPhotos = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (editKeep.length + editNew.length + files.length > 6) alert('Max 6 photos allowed hai.');
+    const mapped = files.map(f => ({ file: f, url: URL.createObjectURL(f) }));
+    setEditNew(prev => [...prev, ...mapped].slice(0, Math.max(0, 6 - editKeep.length)));
+    e.target.value = '';
   };
 
   const getDaysLeft = (expiryDate, plan) => {
@@ -222,7 +234,13 @@ export default function UserDashboard() {
                 <p>Edit save karne par aapka Ad "Pending" mode mein chala jayega aur verification ke baad dobara live hoga.</p>
               </div>
 
-              <div><label className="bg-brand/5 h-20 rounded-xl border-2 border-dashed border-brand/30 flex flex-col items-center justify-center gap-1 text-brand cursor-pointer"><Camera size={20}/><span className="font-bold text-[10px]">{editImage ? 'New Photo Selected' : 'Tap to change Photo (Optional)'}</span><input type="file" className="hidden" onChange={(e) => setEditImage(e.target.files[0])} accept="image/*" /></label></div>
+              <div>
+                {(editKeep.length + editNew.length) > 0 && (<div className="grid grid-cols-3 gap-2 mb-2">
+                  {editKeep.map((u, i) => (<div key={`k-${i}`} className="relative"><img src={getImageUrl(u)} className="w-full h-20 rounded-xl object-cover border border-gray-200" alt={`Photo ${i + 1}`} /><button type="button" onClick={() => setEditKeep(prev => prev.filter((_, j) => j !== i))} className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full text-xs font-black flex items-center justify-center shadow">✕</button></div>))}
+                  {editNew.map((p, i) => (<div key={`n-${i}`} className="relative"><img src={p.url} className="w-full h-20 rounded-xl object-cover border border-blue-200" alt="New photo" /><button type="button" onClick={() => { URL.revokeObjectURL(p.url); setEditNew(prev => prev.filter((_, j) => j !== i)); }} className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full text-xs font-black flex items-center justify-center shadow">✕</button></div>))}
+                </div>)}
+                <label className="bg-brand/5 h-16 rounded-xl border-2 border-dashed border-brand/30 flex items-center justify-center gap-2 text-brand cursor-pointer"><Camera size={20}/><span className="font-bold text-[10px]">{(editKeep.length + editNew.length) > 0 ? `${editKeep.length + editNew.length}/6 Photos (tap to add)` : 'Tap to add Photos (max 6)'}</span><input type="file" className="hidden" multiple accept="image/*" onChange={addEditPhotos} /></label>
+              </div>
               
               <div className="space-y-3">
                 <div><label className="text-xs font-bold text-gray-500 ml-1">Title</label><input type="text" value={editForm.title} onChange={(e) => setEditForm({...editForm, title: e.target.value})} className="w-full p-3 bg-gray-50 rounded-xl outline-none font-bold text-sm border" /></div>
