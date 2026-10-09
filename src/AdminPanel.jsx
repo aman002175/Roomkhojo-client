@@ -24,6 +24,7 @@ export default function AdminPanel() {
   const [showCatModal, setShowCatModal] = useState(false);
   const [showFacModal, setShowFacModal] = useState(false);
   const [showPromoModal, setShowPromoModal] = useState(false);
+  const [migrateEmail, setMigrateEmail] = useState('');
   const [oldPass, setOldPass] = useState('');
   const [newAdminUser, setNewAdminUser] = useState('');
   const [newAdminPass, setNewAdminPass] = useState('');
@@ -128,6 +129,18 @@ export default function AdminPanel() {
 
   const handleApprove = async (id) => { try { await fetch(`${API_URL}/${id}/approve`, { method: 'PATCH', headers: adminAuthHeaders() }); setRefreshKey(k => k + 1); } catch { /* approve fail: silent */ } };
   const handleDelete = async (id) => { if (!window.confirm("⚠️ Room delete karna hai? Ye action wapas nahi hoga.")) return; try { await fetch(`${API_URL}/${id}`, { method: 'DELETE', headers: adminAuthHeaders() }); setRefreshKey(k => k + 1); } catch { /* delete fail: silent */ } };
+
+  // Purane (Render-time) ads ko email wale account se link karo (one-time)
+  const handleMigrateRooms = async () => {
+    if (!migrateEmail.trim()) return alert('Email daliye!');
+    if (!window.confirm('Is email ke user ko saare puraane (bina-link) ads transfer kar dun?')) return;
+    try {
+      const res = await fetch(`${ADMIN_API}/migrate-rooms`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...adminAuthHeaders() }, body: JSON.stringify({ email: migrateEmail.trim() }) });
+      const data = await res.json();
+      alert(data.message);
+      if (data.success) { setMigrateEmail(''); setRefreshKey(k => k + 1); }
+    } catch { alert('Server connection failed.'); }
+  };
 
   const getDaysLeft = (expiryDate, plan) => {
     if (plan === 'regular' || !plan) return <span className="text-gray-500">Lifetime</span>;
@@ -275,6 +288,15 @@ export default function AdminPanel() {
         {/* System Tab */}
         {activeTab === 'system' && (
            <div className="space-y-4 pb-10">
+              {/* Purane Ads Migrate (one-time) */}
+              <div className="bg-white p-5 rounded-2xl shadow-sm border border-blue-200">
+                <h3 className="font-black text-gray-800 mb-1">🔗 Purane Ads Link Karo</h3>
+                <p className="text-[11px] font-bold text-gray-500 mb-3">Render wale time ke ads (puraani login IDs wale) ko kisi email wale account se jod do. Sirf bina-link ads move honge, linked ads safe rahenge.</p>
+                <div className="flex gap-2">
+                  <input type="email" value={migrateEmail} onChange={(e) => setMigrateEmail(e.target.value)} placeholder="user@email.com" className="flex-1 p-3 bg-gray-50 rounded-xl outline-none font-bold text-sm border" />
+                  <button onClick={handleMigrateRooms} className="bg-blue-600 text-white px-4 rounded-xl font-black text-sm active:scale-95">Migrate</button>
+                </div>
+              </div>
              
              {/* UPI Card */}
              <div className="bg-white p-5 rounded-2xl shadow-sm border border-brand/20">
