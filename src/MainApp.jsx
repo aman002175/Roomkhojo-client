@@ -26,8 +26,10 @@ const TYPE_OPTIONS = {
 const DEFAULT_TYPES = ['Boys', 'Girls', 'Family', 'Anyone'];
 const typesForCategory = (cat) => TYPE_OPTIONS[cat] || DEFAULT_TYPES;
 
-// 🗺️ Raster fallback style (vector tiles fail hon toh — alag host, established provider)
-const RASTER_FALLBACK = {
+// 🗺️ Carto Voyager raster PRIMARY (Fastly CDN — slow net par bhi tile-by-tile dikhta hai).
+// Vector (OpenFreeMap) ko hata diya: slow connection par 100+ requests (tiles+fonts+sprites)
+// kabhi poore nahi hote the. Raster = kam requests, har tile aate hi render. Free + attribution ke saath.
+const MAP_STYLE = {
   version: 8,
   sources: {
     carto: {
@@ -353,17 +355,8 @@ export default function MainApp() {
 
   useEffect(() => {
     if (map.current || mapDead) return;
-    // 🗺️ OpenFreeMap vector style (free, no key, modern) — puraana OSM raster hataya
-    map.current = new maplibregl.Map({ container: mapContainer.current, style: 'https://tiles.openfreemap.org/styles/liberty', center: [74.3218, 29.5894], zoom: 13, attributionControl: { compact: true } });
+    map.current = new maplibregl.Map({ container: mapContainer.current, style: MAP_STYLE, center: [74.3218, 29.5894], zoom: 13, attributionControl: { compact: true } });
     map.current.on('load', () => setMapLoaded(true));
-    // Vector tiles lagataar fail hon (3+ errors) toh ek baar raster fallback (markers same rahenge)
-    let errCount = 0;
-    map.current.on('error', () => {
-      errCount += 1;
-      if (map.current && !map.current.__rkFallback && errCount >= 3) {
-        try { map.current.__rkFallback = true; map.current.setStyle(RASTER_FALLBACK); } catch { /* ignore */ }
-      }
-    });
   }, [mapDead]);
 
   const filteredRooms = rooms.filter(r => {
@@ -571,7 +564,7 @@ export default function MainApp() {
 
         {selectedRoom && view === 'map' && !isPickingLocation && (
             <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-[92%] max-h-[42dvh] overflow-y-auto bg-white rounded-2xl shadow-2xl z-[100] p-3 border border-gray-100">
-            <button onClick={() => setSelectedRoom(null)} className="absolute -top-3 -right-3 w-8 h-8 bg-white shadow-lg rounded-full flex items-center justify-center text-gray-600"><X size={18}/></button>
+              <button onClick={() => setSelectedRoom(null)} className="absolute top-2 right-2 w-8 h-8 bg-white shadow-lg rounded-full flex items-center justify-center text-gray-600 z-10"><X size={18}/></button>
             <div className="flex gap-3 mb-2"><div className="flex gap-2 overflow-x-auto shrink-0 max-w-[45%] no-scrollbar">{roomGallery(selectedRoom).map((u, i) => (<img key={i} src={getImageUrl(u)} className="w-16 h-16 object-cover rounded-xl bg-gray-200 shrink-0 border border-gray-100" alt={`Room ${i + 1}`} />))}</div><div className="flex-1"><div className="flex justify-between items-start"><h3 className="font-black text-gray-800 line-clamp-1">{selectedRoom.title}</h3><span className="bg-brand/10 text-brand px-2 py-1 rounded-lg text-[10px] font-black shrink-0 ml-1">{selectedRoom.category}</span></div><p className="text-brand font-black text-xl leading-none mt-1">{selectedRoom.price}</p><p className="text-[11px] font-bold text-gray-500 mt-1.5 flex items-center gap-1"><User size={12}/> {selectedRoom.ownerName || 'Owner'} <span className="mx-1">•</span> <Phone size={12}/> {selectedRoom.mobile}</p></div></div>
             {selectedRoom.description && (<div className="flex gap-1.5 mb-2 pt-2 border-t border-gray-50 overflow-x-auto no-scrollbar flex-nowrap">{selectedRoom.description.split(', ').map(fac => (<span key={fac} className="bg-gray-50 text-gray-600 border px-2 py-1 rounded-md text-[9px] font-bold uppercase shrink-0">{fac}</span>))}</div>)}
             {Array.isArray(selectedRoom.landmarks) && selectedRoom.landmarks.length > 0 && (<div className="bg-purple-50 border border-purple-100 rounded-xl p-2 mb-2"><p className="text-[10px] font-black text-purple-700 uppercase mb-1">📍 Aas-paas ki jagah</p>{selectedRoom.landmarks.map((l, i) => (<p key={i} className="text-[11px] font-bold text-gray-700">{l.cat} {l.name} — <span className="text-purple-700">{fmtDist(l.distM)}</span></p>))}</div>)}
