@@ -26,21 +26,20 @@ const TYPE_OPTIONS = {
 const DEFAULT_TYPES = ['Boys', 'Girls', 'Family', 'Anyone'];
 const typesForCategory = (cat) => TYPE_OPTIONS[cat] || DEFAULT_TYPES;
 
-// 🗺️ Esri World Street Map raster (bina key, bina backend — seedha tile URL).
-// CARTO ne key mandatory kar di thi (galti meri: puraani jaankari thi), isliye hata diya.
-// Esri: free embedding + attribution. Note: Esri ka order {z}/{y}/{x} hai!
+// 🗺️ ORIGINAL OSM Standard raster (shuru wali map — user demand par wapas).
+// maxzoom 19 (OSM ka max — usse aage overzoom, blank tiles nahi).
 const MAP_STYLE = {
   version: 8,
   sources: {
-    esri: {
+    osm: {
       type: 'raster',
-      tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}'],
+      tiles: ['https://a.tile.openstreetmap.org/{z}/{x}/{y}.png'],
       tileSize: 256,
-      attribution: 'Powered by Esri | © OpenStreetMap contributors',
-      maxzoom: 17 // z18+ par is area me data nahi (placeholder aata hai) — overzoom karega
+      attribution: '© OpenStreetMap contributors',
+      maxzoom: 19
     }
   },
-  layers: [{ id: 'esri', type: 'raster', source: 'esri' }]
+  layers: [{ id: 'osm', type: 'raster', source: 'osm' }]
 };
 
 // 🛰️ Satellite view (deep zoom tak coverage — street me gap ho toh ye kaam aayega)
@@ -379,7 +378,7 @@ export default function MainApp() {
 
   useEffect(() => {
     if (map.current || mapDead) return;
-    map.current = new maplibregl.Map({ container: mapContainer.current, style: MAP_STYLE, center: [74.3218, 29.5894], zoom: 13, maxZoom: 18, attributionControl: { compact: true } });
+    map.current = new maplibregl.Map({ container: mapContainer.current, style: MAP_STYLE, center: [74.3218, 29.5894], zoom: 13, maxZoom: 19, attributionControl: { compact: true } });
     map.current.on('load', () => setMapLoaded(true));
   }, [mapDead]);
 
