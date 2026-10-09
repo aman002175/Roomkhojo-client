@@ -34,6 +34,7 @@ export default function AdminPanel() {
   const [sysCategories, setSysCategories] = useState([]);
   const [sysFacilities, setSysFacilities] = useState([]);
   const [sysPricing, setSysPricing] = useState({ regular: '0', promo7: '299', promo15: '499', promo30: '899', upiId: '' });
+  const [sysAdminPath, setSysAdminPath] = useState('/admin-secret-29');
 
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -50,6 +51,7 @@ export default function AdminPanel() {
           setSysCategories(data.settings.categories || []);
           setSysFacilities(data.settings.facilities || []);
           setSysPricing(data.settings.pricing || { regular: '0', promo7: '299', promo15: '499', promo30: '899', upiId: '' });
+          if (data.settings.adminPath) setSysAdminPath(data.settings.adminPath);
         }
       })
       .catch(() => { /* settings load fail: silent */ });
@@ -79,12 +81,12 @@ export default function AdminPanel() {
   };
 
   // 🚨 SMART ERROR TRACKER (Ise Update Kiya Hai)
-  const saveSystemSettings = async (updatedCategories, updatedFacilities, updatedPricing) => {
+  const saveSystemSettings = async (updatedCategories, updatedFacilities, updatedPricing, updatedAdminPath) => {
     try {
       const res = await fetch(`${ADMIN_API}/settings`, { 
         method: 'POST', 
         headers: { 'Content-Type': 'application/json', ...adminAuthHeaders() },
-        body: JSON.stringify({ categories: updatedCategories || sysCategories, facilities: updatedFacilities || sysFacilities, pricing: updatedPricing || sysPricing })
+        body: JSON.stringify({ categories: updatedCategories || sysCategories, facilities: updatedFacilities || sysFacilities, pricing: updatedPricing || sysPricing, adminPath: updatedAdminPath !== undefined ? updatedAdminPath : sysAdminPath })
       });
       
       const textData = await res.text(); 
@@ -315,8 +317,16 @@ export default function AdminPanel() {
                  <input type="text" value={newAdminUser} onChange={e=>setNewAdminUser(e.target.value)} placeholder="New Username (Optional)" className="w-full p-3 bg-gray-50 rounded-xl outline-none font-bold text-sm border focus:border-red-300" />
                  <input type="password" value={newAdminPass} onChange={e=>setNewAdminPass(e.target.value)} placeholder="New Password (Optional)" className="w-full p-3 bg-gray-50 rounded-xl outline-none font-bold text-sm border focus:border-red-300" />
                </div>
-               <button onClick={handleChangeCredentials} className="bg-red-600 text-white font-black py-3 px-4 rounded-xl text-sm w-full flex justify-center items-center gap-2 active:scale-95 transition-transform"><Save size={16}/> Update Security</button>
-             </div>
+                <button onClick={handleChangeCredentials} className="bg-red-600 text-white font-black py-3 px-4 rounded-xl text-sm w-full flex justify-center items-center gap-2 active:scale-95 transition-transform"><Save size={16}/> Update Security</button>
+              </div>
+
+              {/* Admin Path Card (backend-driven path) */}
+              <div className="bg-white p-5 rounded-2xl shadow-sm border border-purple-100">
+                <h3 className="font-black text-purple-700 mb-2">🔗 Admin Panel Path</h3>
+                <p className="text-xs text-gray-500 mb-4 font-bold">Ye path backend se aata hai. Save ke baad page refresh karo — tab naya path chalega, puraana band.</p>
+                <input type="text" value={sysAdminPath} onChange={e=>setSysAdminPath(e.target.value)} placeholder="/mera-secret-path" className="w-full p-3 bg-gray-50 rounded-xl outline-none font-bold text-sm border focus:border-purple-300 mb-3" />
+                <button onClick={() => { if(window.confirm("⚠️ Admin panel ka path badal jayega. Puraana path kaam nahi karega. Continue?")) { saveSystemSettings(sysCategories, sysFacilities, sysPricing, sysAdminPath); } }} className="bg-purple-600 text-white font-black py-3 px-4 rounded-xl text-sm w-full active:scale-95 transition-transform">Save Path</button>
+              </div>
 
              {/* Categories Card */}
              <div className="bg-white p-5 rounded-2xl shadow-sm border">
