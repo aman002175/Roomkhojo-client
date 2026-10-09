@@ -35,5 +35,5 @@ npm run dev            # http://localhost:5173
 ## Deploy (Vercel)
 
 - Repo connect karo → auto-deploy on push (manual `dist` upload khatam).
-- Build-time env vars me `VITE_API_BASE_URL` + `VITE_GOOGLE_CLIENT_ID` set karo.
-- `public/_redirects` Netlify ke liye tha; Vercel par SPA fallback automatic hai.
+- Build-time env vars me `VITE_API_BASE_URL` + `VITE_GOOGLE_CLIENT_ID` (+ optional `VITE_ADMIN_PATH`) set karo. Env badalne par **redeploy zaroori** hai.
+- `public/_redirects` Netlify ke liye hai; Vercel par SPA fallback `vercel.json` rewrites se hota hai (direct URL/refresh sab routes par kaam karte hain).
