@@ -26,21 +26,21 @@ const TYPE_OPTIONS = {
 const DEFAULT_TYPES = ['Boys', 'Girls', 'Family', 'Anyone'];
 const typesForCategory = (cat) => TYPE_OPTIONS[cat] || DEFAULT_TYPES;
 
-// 🗺️ Carto Voyager raster PRIMARY (Fastly CDN — slow net par bhi tile-by-tile dikhta hai).
-// Vector (OpenFreeMap) ko hata diya: slow connection par 100+ requests (tiles+fonts+sprites)
-// kabhi poore nahi hote the. Raster = kam requests, har tile aate hi render. Free + attribution ke saath.
+// 🗺️ Esri World Street Map raster (bina key, bina backend — seedha tile URL).
+// CARTO ne key mandatory kar di thi (galti meri: puraani jaankari thi), isliye hata diya.
+// Esri: free embedding + attribution. Note: Esri ka order {z}/{y}/{x} hai!
 const MAP_STYLE = {
   version: 8,
   sources: {
-    carto: {
+    esri: {
       type: 'raster',
-      tiles: ['https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png'],
+      tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}'],
       tileSize: 256,
-      attribution: '© OpenStreetMap contributors © CARTO',
-      maxzoom: 20
+      attribution: 'Powered by Esri | © OpenStreetMap contributors',
+      maxzoom: 19
     }
   },
-  layers: [{ id: 'carto', type: 'raster', source: 'carto' }]
+  layers: [{ id: 'esri', type: 'raster', source: 'esri' }]
 };
 
 // 📍 Haversine distance (meters) + format
