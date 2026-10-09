@@ -26,6 +26,21 @@ const TYPE_OPTIONS = {
 const DEFAULT_TYPES = ['Boys', 'Girls', 'Family', 'Anyone'];
 const typesForCategory = (cat) => TYPE_OPTIONS[cat] || DEFAULT_TYPES;
 
+// 🗺️ Raster fallback style (vector tiles fail hon toh — alag host, established provider)
+const RASTER_FALLBACK = {
+  version: 8,
+  sources: {
+    carto: {
+      type: 'raster',
+      tiles: ['https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png'],
+      tileSize: 256,
+      attribution: '© OpenStreetMap contributors © CARTO',
+      maxzoom: 20
+    }
+  },
+  layers: [{ id: 'carto', type: 'raster', source: 'carto' }]
+};
+
 // 📍 Haversine distance (meters) + format
 const distMeters = (lat1, lng1, lat2, lng2) => {
   const R = 6371000;
@@ -153,6 +168,10 @@ export default function MainApp() {
   const [poiLoading, setPoiLoading] = useState(false);
   const [poiList, setPoiList] = useState([]);
   const [poiSelected, setPoiSelected] = useState([]);
+  // 🗺️ Map load states (loader + dead-fallback UI ke liye)
+  const [mapLoaded, setMapLoaded] = useState(false);
+  // WebGL nahi (Brave Shields/purana browser) toh map kabhi nahi chalega — render-time check
+  const [mapDead] = useState(() => (maplibregl.supported ? !maplibregl.supported() : false));
 
   const [sysSettings, setSysSettings] = useState({
     categories: ['PG', 'Flat', 'Hostel', 'Library', 'Office'],
@@ -333,10 +352,19 @@ export default function MainApp() {
   };
 
   useEffect(() => {
-    if (map.current) return;
+    if (map.current || mapDead) return;
     // 🗺️ OpenFreeMap vector style (free, no key, modern) — puraana OSM raster hataya
     map.current = new maplibregl.Map({ container: mapContainer.current, style: 'https://tiles.openfreemap.org/styles/liberty', center: [74.3218, 29.5894], zoom: 13, attributionControl: { compact: true } });
-  }, []);
+    map.current.on('load', () => setMapLoaded(true));
+    // Vector tiles lagataar fail hon (3+ errors) toh ek baar raster fallback (markers same rahenge)
+    let errCount = 0;
+    map.current.on('error', () => {
+      errCount += 1;
+      if (map.current && !map.current.__rkFallback && errCount >= 3) {
+        try { map.current.__rkFallback = true; map.current.setStyle(RASTER_FALLBACK); } catch { /* ignore */ }
+      }
+    });
+  }, [mapDead]);
 
   const filteredRooms = rooms.filter(r => {
     const matchesCategory = activeCategory === 'all' || r.category === activeCategory;
@@ -476,6 +504,19 @@ export default function MainApp() {
       </div>
 
       <div className="flex-1 relative overflow-hidden bg-gray-100">
+        {view === 'map' && !mapLoaded && !mapDead && (
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 bg-gray-100/80 pointer-events-none">
+            <p className="font-black text-gray-500 animate-pulse text-sm">🗺️ Map load ho raha hai…</p>
+            <p className="text-[11px] font-bold text-gray-400">Slow net par 10-20 sec lag sakta hai</p>
+          </div>
+        )}
+        {mapDead && (
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-gray-100 p-8 text-center">
+            <p className="font-black text-gray-700">Map browser me blocked hai (WebGL off / Shields on).</p>
+            <p className="text-xs font-bold text-gray-500">Brave Shields down karke ya Chrome me kholo. List view waise bhi chal raha hai.</p>
+            <button onClick={() => setView('list')} className="bg-brand text-white px-5 py-3 rounded-2xl font-black text-sm">List View kholo</button>
+          </div>
+        )}
         {/* 🎯 Sponsored banner strip (auto-flip, click = location popup) */}
         {bannerRooms.length > 0 && (() => {
           const b = bannerRooms[bannerIndex % bannerRooms.length];
@@ -529,15 +570,15 @@ export default function MainApp() {
         </div>
 
         {selectedRoom && view === 'map' && !isPickingLocation && (
-            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-[92%] max-h-[46dvh] overflow-y-auto bg-white rounded-3xl shadow-2xl z-[100] p-4 border border-gray-100">
+            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-[92%] max-h-[42dvh] overflow-y-auto bg-white rounded-2xl shadow-2xl z-[100] p-3 border border-gray-100">
             <button onClick={() => setSelectedRoom(null)} className="absolute -top-3 -right-3 w-8 h-8 bg-white shadow-lg rounded-full flex items-center justify-center text-gray-600"><X size={18}/></button>
-            <div className="flex gap-4 mb-3"><div className="flex gap-2 overflow-x-auto shrink-0 max-w-[45%] no-scrollbar">{roomGallery(selectedRoom).map((u, i) => (<img key={i} src={getImageUrl(u)} className="w-20 h-20 object-cover rounded-2xl bg-gray-200 shrink-0 border border-gray-100" alt={`Room ${i + 1}`} />))}</div><div className="flex-1"><div className="flex justify-between items-start"><h3 className="font-black text-gray-800 line-clamp-1">{selectedRoom.title}</h3><span className="bg-brand/10 text-brand px-2 py-1 rounded-lg text-[10px] font-black shrink-0 ml-1">{selectedRoom.category}</span></div><p className="text-brand font-black text-xl leading-none mt-1">{selectedRoom.price}</p><p className="text-[11px] font-bold text-gray-500 mt-1.5 flex items-center gap-1"><User size={12}/> {selectedRoom.ownerName || 'Owner'} <span className="mx-1">•</span> <Phone size={12}/> {selectedRoom.mobile}</p></div></div>
-            {selectedRoom.description && (<div className="flex flex-wrap gap-1.5 mb-3 pt-2 border-t border-gray-50">{selectedRoom.description.split(', ').map(fac => (<span key={fac} className="bg-gray-50 text-gray-600 border px-2 py-1 rounded-md text-[9px] font-bold uppercase">{fac}</span>))}</div>)}
-            {Array.isArray(selectedRoom.landmarks) && selectedRoom.landmarks.length > 0 && (<div className="bg-purple-50 border border-purple-100 rounded-xl p-2.5 mb-3"><p className="text-[10px] font-black text-purple-700 uppercase mb-1">📍 Aas-paas ki jagah</p>{selectedRoom.landmarks.map((l, i) => (<p key={i} className="text-[11px] font-bold text-gray-700">{l.cat} {l.name} — <span className="text-purple-700">{fmtDist(l.distM)}</span></p>))}</div>)}
+            <div className="flex gap-3 mb-2"><div className="flex gap-2 overflow-x-auto shrink-0 max-w-[45%] no-scrollbar">{roomGallery(selectedRoom).map((u, i) => (<img key={i} src={getImageUrl(u)} className="w-16 h-16 object-cover rounded-xl bg-gray-200 shrink-0 border border-gray-100" alt={`Room ${i + 1}`} />))}</div><div className="flex-1"><div className="flex justify-between items-start"><h3 className="font-black text-gray-800 line-clamp-1">{selectedRoom.title}</h3><span className="bg-brand/10 text-brand px-2 py-1 rounded-lg text-[10px] font-black shrink-0 ml-1">{selectedRoom.category}</span></div><p className="text-brand font-black text-xl leading-none mt-1">{selectedRoom.price}</p><p className="text-[11px] font-bold text-gray-500 mt-1.5 flex items-center gap-1"><User size={12}/> {selectedRoom.ownerName || 'Owner'} <span className="mx-1">•</span> <Phone size={12}/> {selectedRoom.mobile}</p></div></div>
+            {selectedRoom.description && (<div className="flex gap-1.5 mb-2 pt-2 border-t border-gray-50 overflow-x-auto no-scrollbar flex-nowrap">{selectedRoom.description.split(', ').map(fac => (<span key={fac} className="bg-gray-50 text-gray-600 border px-2 py-1 rounded-md text-[9px] font-bold uppercase shrink-0">{fac}</span>))}</div>)}
+            {Array.isArray(selectedRoom.landmarks) && selectedRoom.landmarks.length > 0 && (<div className="bg-purple-50 border border-purple-100 rounded-xl p-2 mb-2"><p className="text-[10px] font-black text-purple-700 uppercase mb-1">📍 Aas-paas ki jagah</p>{selectedRoom.landmarks.map((l, i) => (<p key={i} className="text-[11px] font-bold text-gray-700">{l.cat} {l.name} — <span className="text-purple-700">{fmtDist(l.distM)}</span></p>))}</div>)}
             <div className="flex gap-2 items-center mb-3">
               <button onClick={() => handleReportUnavailable(selectedRoom._id)} className="text-[10px] bg-red-50 text-red-600 px-2 py-1 rounded border border-red-100 active:scale-95 font-bold shrink-0">Unavailable?</button>
             </div>
-            <div className="flex gap-2"><a href={`tel:${selectedRoom.mobile}`} className="flex-1 bg-brand text-white py-2.5 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 active:scale-95"><Phone size={14}/> Call</a><a href={`https://wa.me/91${selectedRoom.mobile}?text=${encodeURIComponent(`Namaste! Maine RoomKhojo par aapka room "${selectedRoom.title}" dekha. Kya ye abhi available hai? \n\nRoom Link: ${window.location.href}`)}`} target="_blank" rel="noreferrer" className="flex-1 border-2 border-[#25D366] text-[#25D366] py-2.5 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 active:scale-95"><MessageCircle size={14}/> WhatsApp</a><a href={`https://www.google.com/maps/dir/?api=1&destination=${selectedRoom.lat},${selectedRoom.lng}`} target="_blank" rel="noreferrer" className="flex-1 bg-blue-50 text-blue-600 border border-blue-200 py-2.5 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 active:scale-95"><Navigation size={14}/> Navigate</a></div>
+            <div className="flex gap-2"><a href={`tel:${selectedRoom.mobile}`} className="flex-1 bg-brand text-white py-2 rounded-xl text-[11px] font-black flex items-center justify-center gap-1.5 active:scale-95"><Phone size={14}/> Call</a><a href={`https://wa.me/91${selectedRoom.mobile}?text=${encodeURIComponent(`Namaste! Maine RoomKhojo par aapka room "${selectedRoom.title}" dekha. Kya ye abhi available hai? \n\nRoom Link: ${window.location.href}`)}`} target="_blank" rel="noreferrer" className="flex-1 border-2 border-[#25D366] text-[#25D366] py-2 rounded-xl text-[11px] font-black flex items-center justify-center gap-1.5 active:scale-95"><MessageCircle size={14}/> WhatsApp</a><a href={`https://www.google.com/maps/dir/?api=1&destination=${selectedRoom.lat},${selectedRoom.lng}`} target="_blank" rel="noreferrer" className="flex-1 bg-blue-50 text-blue-600 border border-blue-200 py-2 rounded-xl text-[11px] font-black flex items-center justify-center gap-1.5 active:scale-95"><Navigation size={14}/> Navigate</a></div>
           </div>
         )}
       </div>
