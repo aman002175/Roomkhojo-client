@@ -43,6 +43,16 @@ export default function UserDashboard() {
 
   const handleLogout = () => { localStorage.removeItem('roomkhojo_user'); localStorage.removeItem('roomkhojo_token'); navigate('/'); window.location.reload(); };
 
+  // 🔗 Apne puraane ads khud link karo — admin ki zaroorat nahi (one-tap)
+  const handleClaimOrphans = async () => {
+    try {
+      const res = await fetch(`${BASE_URL}/api/users/claim-orphans`, { method: 'POST', headers: authHeaders() });
+      const data = await res.json();
+      alert(data.message);
+      if (data.success && data.migrated > 0) setRefreshKey(k => k + 1);
+    } catch { alert('Server connection failed.'); }
+  };
+
   const toggleRoomStatus = async (roomId) => {
     try {
       const res = await fetch(`${BASE_URL}/api/rooms/${roomId}/toggle-status`, { method: 'PATCH', headers: authHeaders() });
@@ -122,7 +132,14 @@ export default function UserDashboard() {
         </div>
         
         {myRooms.length === 0 ? (
-            <div className="bg-white p-10 rounded-3xl shadow-sm border border-gray-100 flex flex-col items-center text-center"><div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-4"><Bell size={24} className="text-gray-300"/></div><p className="text-gray-500 font-bold">Abhi aapne koi room ad post nahi kiya hai.</p><button onClick={() => navigate('/')} className="mt-4 text-brand font-black underline">Go post an ad</button></div>
+            <div className="space-y-4">
+              <div className="bg-blue-50 p-5 rounded-3xl border border-blue-200 text-center">
+                <p className="font-black text-blue-900 mb-1">🔗 Purane ads hain?</p>
+                <p className="text-xs font-bold text-blue-700 mb-3">Puraani site wale ads ek tap me link karo (admin ki zaroorat nahi).</p>
+                <button onClick={handleClaimOrphans} className="bg-blue-600 text-white px-5 py-3 rounded-2xl font-black text-sm active:scale-95">Mere Purane Ads Link Karo</button>
+              </div>
+              <div className="bg-white p-10 rounded-3xl shadow-sm border border-gray-100 flex flex-col items-center text-center"><div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-4"><Bell size={24} className="text-gray-300"/></div><p className="text-gray-500 font-bold">Abhi aapne koi room ad post nahi kiya hai.</p><button onClick={() => navigate('/')} className="mt-4 text-brand font-black underline">Go post an ad</button></div>
+            </div>
         ) : (
             <div className="grid gap-4 pb-10">
                 {myRooms.map(room => {

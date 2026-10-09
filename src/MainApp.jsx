@@ -14,6 +14,18 @@ const getImageUrl = (path) => !path ? 'https://images.unsplash.com/photo-1522708
 // UPI note ke liye local code (asli paymentCode server banata hai)
 const makePayCode = () => 'RK-' + Math.random().toString(36).substr(2, 5).toUpperCase();
 
+// Category-wise audience options (PG/Flat/Room/service-wise Boys/Girls/Anyone)
+const TYPE_OPTIONS = {
+  PG: ['Boys', 'Girls'],
+  Flat: ['Boys', 'Girls', 'Anyone'],
+  Room: ['Boys', 'Girls', 'Anyone'],
+  Hostel: ['Boys', 'Girls'],
+  Library: ['Anyone'],
+  Office: ['Anyone']
+};
+const DEFAULT_TYPES = ['Boys', 'Girls', 'Family', 'Anyone'];
+const typesForCategory = (cat) => TYPE_OPTIONS[cat] || DEFAULT_TYPES;
+
 // Logged-in API calls ke liye Bearer header
 const authHeaders = () => {
   const token = localStorage.getItem('roomkhojo_token');
@@ -29,7 +41,11 @@ export default function MainApp() {
 
   const [view, setView] = useState('map'); 
   const [selectedRoom, setSelectedRoom] = useState(null);
-  const [activeCategory, setActiveCategory] = useState('all'); 
+  const [activeCategory, setActiveCategory] = useState('all');
+  const [activeAudience, setActiveAudience] = useState('all');
+  const [bannerRooms, setBannerRooms] = useState([]);
+  const [bannerIndex, setBannerIndex] = useState(0);
+  const [wantBanner, setWantBanner] = useState(false);
   const [rooms, setRooms] = useState([]);
   const [searchQuery, setSearchQuery] = useState(''); 
   
@@ -72,7 +88,7 @@ export default function MainApp() {
 
   const [sysSettings, setSysSettings] = useState({
     categories: ['PG', 'Flat', 'Hostel', 'Library', 'Office'],
-    pricing: { regular: '0', promo7: '299', promo15: '499', promo30: '899', upiId: 'admin@ybl' }
+    pricing: { regular: '0', promo7: '299', promo15: '499', promo30: '899', upiId: 'admin@ybl', bannerPrice: '499', bannerDays: '7' }
   });
 
   useEffect(() => {
@@ -172,12 +188,19 @@ export default function MainApp() {
     } catch { alert('Server connection failed.'); }
   };
 
-  const getPayAmount = () => {
+  const getAdAmount = () => {
     if (adType === 'regular') return sysSettings.pricing.regular;
     if (promoPlan === '7') return sysSettings.pricing.promo7;
     if (promoPlan === '15') return sysSettings.pricing.promo15;
     if (promoPlan === '30') return sysSettings.pricing.promo30;
     return '0';
+  };
+
+  // Total = ad amount + banner add-on (dono admin-pricing se)
+  const getPayAmount = () => {
+    const ad = Number(getAdAmount() || 0);
+    const banner = wantBanner ? Number(sysSettings.pricing.bannerPrice || 0) : 0;
+    return String(ad + banner);
   };
 
   const handleLiveLocation = () => {
@@ -226,13 +249,15 @@ export default function MainApp() {
       fd.append('lng', postLng); fd.append('lat', postLat); fd.append('isPromoted', adType === 'promo');
       fd.append('promoPlan', adType === 'promo' ? promoPlan : 'regular');
       fd.append('paymentRef', payRef.trim());
+      fd.append('bannerRequested', wantBanner);
+      fd.append('bannerRef', payRef.trim());
       if (postImage) fd.append('image', postImage);
 
       // NOTE: userId/ownerName/paymentCode server token se leta hai (spoof-proof).
       const res = await fetch(API_URL, { method: 'POST', headers: authHeaders(), body: fd }); const data = await res.json();
       if(data.success) { 
-        alert("🎉 Ad submitted! Admin verification ke baad live hoga."); 
-        setIsPostAdOpen(false); setShowPaymentWindow(false); setPostTitle(''); setPostPrice(''); setPostMobile(''); setSelectedFacilities([]); setPostLng(null); setPostLat(null); setPostImage(null); setPayRef(''); 
+        alert("🎉 " + (data.message || 'Ad submitted!')); 
+        setIsPostAdOpen(false); setShowPaymentWindow(false); setPostTitle(''); setPostPrice(''); setPostMobile(''); setSelectedFacilities([]); setPostLng(null); setPostLat(null); setPostImage(null); setPayRef(''); setWantBanner(false); 
       }
     } catch { alert("Server connection failed."); }
     setIsSubmitting(false);
@@ -245,10 +270,25 @@ export default function MainApp() {
 
   const filteredRooms = rooms.filter(r => {
     const matchesCategory = activeCategory === 'all' || r.category === activeCategory;
+    const matchesAudience = activeAudience === 'all' || (r.type || '') === activeAudience;
     const searchStr = searchQuery.toLowerCase();
     const matchesSearch = r.title.toLowerCase().includes(searchStr) || (r.landmark || 'hanumangarh').toLowerCase().includes(searchStr) || r.type.toLowerCase().includes(searchStr) || r.category.toLowerCase().includes(searchStr);
-    return matchesCategory && matchesSearch;
+    return matchesCategory && matchesAudience && matchesSearch;
   });
+
+  // 🎯 Banner strip data + auto-flip (har 4 sec)
+  useEffect(() => {
+    fetch(`${BASE_URL}/api/rooms/banners`)
+      .then(res => res.json())
+      .then(data => { if (data.success) { setBannerRooms(data.rooms || []); setBannerIndex(0); } })
+      .catch(() => { /* banner optional: strip chhupa rahega */ });
+  }, []);
+
+  useEffect(() => {
+    if (bannerRooms.length < 2) return;
+    const t = setInterval(() => setBannerIndex(i => (i + 1) % bannerRooms.length), 4000);
+    return () => clearInterval(t);
+  }, [bannerRooms.length]);
 
   const handleReportUnavailable = async (roomId) => {
     try {
@@ -267,7 +307,7 @@ export default function MainApp() {
     filteredRooms.forEach(room => {
       const isSelected = selectedRoom && selectedRoom._id === room._id;
       const el = document.createElement('div'); 
-      el.className = `font-bold px-3 py-1.5 rounded-full shadow-lg border-2 border-white text-xs cursor-pointer transition-all duration-300 ${room.isPromoted ? 'bg-orange-500 z-20 text-white' : 'bg-brand text-white'} ${isSelected ? '-translate-y-3 scale-110 shadow-2xl z-40' : 'active:scale-90'}`; 
+      el.className = `font-bold px-3 py-1.5 rounded-full shadow-lg border-2 border-white text-xs cursor-pointer transition-all duration-300 ${room.isPromoted ? 'bg-orange-500 z-20 text-white' : 'bg-green-600 z-10 text-white'} ${isSelected ? '-translate-y-3 scale-110 shadow-2xl z-40' : 'active:scale-90'}`; 
       // textContent (innerHTML nahi) — DB data se DOM-XSS ka risk khatam
       el.textContent = room.isPromoted ? `⭐ ${room.price}` : room.price;
       const onClick = (e) => { e.stopPropagation(); setSelectedRoom(room); map.current.flyTo({ center: [room.lng, room.lat], zoom: 15.5 }); };
@@ -298,10 +338,38 @@ export default function MainApp() {
       <div className="z-40 bg-white shadow-sm shrink-0">
         <header className="px-4 py-3 flex justify-between items-center border-b border-gray-50"><div className="flex items-center gap-3"><button onClick={() => setIsMenuOpen(true)} className="p-2 -ml-2 text-gray-600 active:scale-95"><Menu size={26} /></button><div className="flex flex-col"><h1 className="text-2xl font-black text-gray-800 tracking-tighter leading-tight">Room<span className="text-brand">Khojo</span></h1><a href="https://aman-bishnoi-wrold.oneapp.dev/#portfolio" target="_blank" rel="noreferrer" className="text-[11px] font-bold text-gray-500 hover:opacity-80 transition-opacity leading-none mt-0.5 tracking-tight">Built with 💝 by <span className="text-brand">Aman Bishnoi</span></a></div></div><button onClick={() => isLoggedIn ? navigate('/dashboard') : setAuthMode('login')} className={`w-10 h-10 border rounded-full flex items-center justify-center active:scale-95 transition-all ${isLoggedIn ? 'bg-brand text-white border-brand shadow-lg shadow-brand/30' : 'bg-gray-50 text-gray-600'}`}><User size={22} /></button></header>
         <div className="px-4 pt-3"><div className="relative flex items-center"><Search className="absolute left-3 text-gray-400" size={18} /><input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onKeyDown={handleMapSearch} placeholder="Enter city (e.g. Ganganagar) & Search..." className="w-full bg-gray-100 text-sm font-bold text-gray-700 rounded-2xl py-3 pl-10 pr-24 outline-none border border-transparent focus:border-brand/30 transition-colors"/><button onClick={handleMapSearch} className="absolute right-2 bg-brand text-white text-xs font-black px-4 py-2 rounded-xl active:scale-95 transition-transform shadow-md">Go 🚀</button></div></div>
-        <div className="flex overflow-x-auto no-scrollbar py-3 px-4 gap-3">{dynamicCategories.map((cat) => (<button key={cat.id} onClick={() => setActiveCategory(cat.id)} className={`flex shrink-0 items-center gap-2 px-4 py-2 rounded-2xl text-sm font-bold whitespace-nowrap ${activeCategory === cat.id ? 'bg-brand text-white shadow-lg shadow-brand/30 scale-105' : 'bg-gray-100 text-gray-600'}`}><span>{cat.icon}</span><span>{cat.name}</span></button>))}</div>
+        <div className="flex overflow-x-auto no-scrollbar py-3 px-4 gap-3">{dynamicCategories.map((cat) => (<button key={cat.id} onClick={() => { setActiveCategory(cat.id); setActiveAudience('all'); }} className={`flex shrink-0 items-center gap-2 px-4 py-2 rounded-2xl text-sm font-bold whitespace-nowrap ${activeCategory === cat.id ? 'bg-brand text-white shadow-lg shadow-brand/30 scale-105' : 'bg-gray-100 text-gray-600'}`}><span>{cat.icon}</span><span>{cat.name}</span></button>))}</div>
+        {activeCategory !== 'all' && (
+          <div className="flex overflow-x-auto no-scrollbar pb-3 px-4 gap-2">
+            {['all', ...typesForCategory(activeCategory)].map(aud => (
+              <button key={aud} onClick={() => setActiveAudience(aud)} className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-black whitespace-nowrap border ${activeAudience === aud ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-gray-500 border-gray-200'}`}>
+                {aud === 'all' ? 'Sab' : aud}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="flex-1 relative overflow-hidden bg-gray-100">
+        {/* 🎯 Sponsored banner strip (auto-flip, click = location popup) */}
+        {bannerRooms.length > 0 && (() => {
+          const b = bannerRooms[bannerIndex % bannerRooms.length];
+          return (
+            <div className="absolute top-2 left-2 right-2 z-30">
+              <div onClick={() => { setSelectedRoom(b); setView('map'); if (map.current) map.current.flyTo({ center: [b.lng, b.lat], zoom: 15.5 }); }} className="bg-white/95 backdrop-blur rounded-2xl shadow-xl border border-purple-200 p-2 flex items-center gap-3 active:scale-[0.98] transition-transform cursor-pointer">
+                <img src={getImageUrl(b.image)} className="w-14 h-14 rounded-xl object-cover bg-gray-200 shrink-0" alt="Sponsored" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[9px] font-black text-purple-600 uppercase tracking-wider">⭐ Sponsored</p>
+                  <p className="font-black text-gray-800 text-sm leading-tight truncate">{b.title}</p>
+                  <p className="text-brand font-black text-sm">{b.price} <span className="text-[10px] text-gray-400 font-bold">• {b.category} • {b.type}</span></p>
+                </div>
+                <div className="flex gap-1 pr-1 shrink-0">
+                  {bannerRooms.map((_, i) => (<span key={i} className={`w-1.5 h-1.5 rounded-full ${i === (bannerIndex % bannerRooms.length) ? 'bg-purple-600' : 'bg-gray-300'}`} />))}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
         <div className={`absolute inset-0 transition-opacity duration-500 ${view === 'map' ? 'opacity-100 z-10' : 'opacity-0 z-0'}`}><div ref={mapContainer} className="w-full h-full" /></div>
         {view === 'map' && !isPickingLocation && (<button onClick={handleLiveLocation} className="absolute bottom-28 right-4 z-40 bg-white p-3 rounded-full shadow-xl border border-gray-100 text-brand active:scale-90 transition-transform"><Navigation size={24} fill="currentColor"/></button>)}
         {view === 'map' && isPickingLocation && (<button onClick={handleLiveLocation} className="absolute bottom-[90px] right-4 z-40 bg-white px-4 py-2.5 rounded-full shadow-xl border border-gray-100 text-brand font-black text-xs flex items-center gap-2 active:scale-90 transition-transform"><Navigation size={16} fill="currentColor"/> My Location</button>)}
@@ -362,8 +430,9 @@ export default function MainApp() {
           <div className="p-5 overflow-y-auto space-y-5 flex-1">
              <div className="flex bg-gray-100 p-1 rounded-2xl border"><button onClick={() => setAdType('regular')} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all shadow-sm ${adType === 'regular' ? 'bg-white text-gray-900 border' : 'text-gray-400'}`}>Standard Ad</button><button onClick={() => setAdType('promo')} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all shadow-md ${adType === 'promo' ? 'bg-orange-500 text-white' : 'text-gray-400'}`}>⭐ Promoted Ad</button></div>
              {adType === 'promo' && (<div className="flex gap-2"><button onClick={() => setPromoPlan('7')} className={`flex-1 p-2 rounded-xl border text-xs font-bold transition-colors ${promoPlan === '7' ? 'bg-orange-50 border-orange-500 text-orange-600' : 'bg-gray-50 border-transparent text-gray-500'}`}>7 Days<br/><span className="text-lg">₹{sysSettings.pricing.promo7}</span></button><button onClick={() => setPromoPlan('15')} className={`flex-1 p-2 rounded-xl border text-xs font-bold transition-colors ${promoPlan === '15' ? 'bg-orange-50 border-orange-500 text-orange-600' : 'bg-gray-50 border-transparent text-gray-500'}`}>15 Days<br/><span className="text-lg">₹{sysSettings.pricing.promo15}</span></button><button onClick={() => setPromoPlan('30')} className={`flex-1 p-2 rounded-xl border text-xs font-bold transition-colors ${promoPlan === '30' ? 'bg-orange-50 border-orange-500 text-orange-600' : 'bg-gray-50 border-transparent text-gray-500'}`}>30 Days<br/><span className="text-lg">₹{sysSettings.pricing.promo30}</span></button></div>)}
-             <div><label className="bg-brand/5 h-24 rounded-2xl border-2 border-dashed border-brand/30 flex flex-col items-center justify-center gap-2 text-brand cursor-pointer"><Camera size={24}/><span className="font-bold text-xs">{postImage ? 'Image Selected' : 'Upload Photo'}</span><input type="file" className="hidden" onChange={(e) => setPostImage(e.target.files[0])} accept="image/*" /></label></div>
-             <div className="space-y-3"><input type="text" value={postTitle} onChange={(e) => setPostTitle(e.target.value)} placeholder="Title" className="w-full p-4 bg-gray-50 rounded-2xl outline-none font-bold text-sm" /><div className="flex gap-3"><select value={postCategory} onChange={(e) => setPostCategory(e.target.value)} className="flex-1 p-4 bg-gray-50 rounded-2xl outline-none font-bold text-sm">{sysSettings.categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}</select><select value={postType} onChange={(e) => setPostType(e.target.value)} className="flex-1 p-4 bg-gray-50 rounded-2xl outline-none font-bold text-sm"><option value="Boys">Boys</option><option value="Girls">Girls</option><option value="Family">Family</option></select></div><div className="flex gap-3"><input type="number" value={postPrice} onChange={(e) => setPostPrice(e.target.value)} placeholder="Rent (₹)/Month" className="flex-1 p-4 bg-gray-50 rounded-2xl outline-none font-bold text-sm"/><input type="number" value={postMobile} onChange={(e) => setPostMobile(e.target.value)} placeholder="Mobile No." className="flex-[1.5] p-4 bg-gray-50 rounded-2xl outline-none font-bold text-sm"/></div></div>
+              <div><label className="bg-brand/5 h-24 rounded-2xl border-2 border-dashed border-brand/30 flex flex-col items-center justify-center gap-2 text-brand cursor-pointer"><Camera size={24}/><span className="font-bold text-xs">{postImage ? 'Image Selected' : 'Upload Photo'}</span><input type="file" className="hidden" onChange={(e) => setPostImage(e.target.files[0])} accept="image/*" /></label></div>
+              <div className={`flex items-center justify-between p-3 rounded-2xl border-2 transition-colors ${wantBanner ? 'bg-purple-50 border-purple-400' : 'bg-gray-50 border-transparent'}`}><div><p className="text-sm font-black text-gray-800">🎯 Top Banner Add-on</p><p className="text-[11px] font-bold text-gray-500">₹{sysSettings.pricing.bannerPrice || '499'} • {sysSettings.pricing.bannerDays || '7'} din top strip par (paid)</p></div><button type="button" onClick={() => setWantBanner(!wantBanner)} className={`w-12 h-7 rounded-full font-black text-[10px] transition-colors ${wantBanner ? 'bg-purple-600 text-white' : 'bg-gray-300 text-gray-500'}`}>{wantBanner ? 'ON' : 'OFF'}</button></div>
+             <div className="space-y-3"><input type="text" value={postTitle} onChange={(e) => setPostTitle(e.target.value)} placeholder="Title" className="w-full p-4 bg-gray-50 rounded-2xl outline-none font-bold text-sm" /><div className="flex gap-3"><select value={postCategory} onChange={(e) => { setPostCategory(e.target.value); const opts = typesForCategory(e.target.value); setPostType(opts[0]); }} className="flex-1 p-4 bg-gray-50 rounded-2xl outline-none font-bold text-sm">{sysSettings.categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}</select><select value={postType} onChange={(e) => setPostType(e.target.value)} className="flex-1 p-4 bg-gray-50 rounded-2xl outline-none font-bold text-sm">{typesForCategory(postCategory).map(t => <option key={t} value={t}>{t}</option>)}</select></div><div className="flex gap-3"><input type="number" value={postPrice} onChange={(e) => setPostPrice(e.target.value)} placeholder="Rent (₹)/Month" className="flex-1 p-4 bg-gray-50 rounded-2xl outline-none font-bold text-sm"/><input type="number" value={postMobile} onChange={(e) => setPostMobile(e.target.value)} placeholder="Mobile No." className="flex-[1.5] p-4 bg-gray-50 rounded-2xl outline-none font-bold text-sm"/></div></div>
              <div><p className="text-xs font-black text-gray-500 mb-2 uppercase">Select Facilities</p><div className="flex flex-wrap gap-2">{(sysSettings.facilities || []).map(fac => (<button type="button" key={fac} onClick={() => setSelectedFacilities(prev => prev.includes(fac) ? prev.filter(f => f !== fac) : [...prev, fac])} className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${selectedFacilities.includes(fac) ? 'bg-brand text-white border-brand shadow-md' : 'bg-gray-50 text-gray-500 border-gray-200'}`}>{fac}</button>))}</div></div>
              <div className="flex gap-3 mt-2"><input type="text" value={postLandmark} onChange={(e) => setPostLandmark(e.target.value)} placeholder="Landmark" className="flex-1 p-4 bg-gray-50 rounded-2xl outline-none font-bold text-sm"/><button onClick={() => { setIsPostAdOpen(false); setIsPickingLocation(true); setView('map'); handleLiveLocation(); }} className={`p-3 rounded-2xl font-black text-xs flex items-center justify-center gap-1 border-2 transition-colors ${postLng ? 'bg-green-50 text-green-600 border-green-200' : 'bg-blue-50 text-blue-600 border-blue-200'}`}><Target size={16}/> {postLng ? 'Pinned!' : 'Map'}</button></div>
           </div>

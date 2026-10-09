@@ -34,6 +34,7 @@ export default function AdminPanel() {
   const [sysCategories, setSysCategories] = useState([]);
   const [sysFacilities, setSysFacilities] = useState([]);
   const [sysPricing, setSysPricing] = useState({ regular: '0', promo7: '299', promo15: '499', promo30: '899', upiId: '' });
+  const [sysAutoApprove, setSysAutoApprove] = useState(false);
   const [sysAdminPath, setSysAdminPath] = useState('/admin-secret-29');
 
   const [refreshKey, setRefreshKey] = useState(0);
@@ -51,6 +52,7 @@ export default function AdminPanel() {
           setSysCategories(data.settings.categories || []);
           setSysFacilities(data.settings.facilities || []);
           setSysPricing(data.settings.pricing || { regular: '0', promo7: '299', promo15: '499', promo30: '899', upiId: '' });
+          if (typeof data.settings.autoApproveFree === 'boolean') setSysAutoApprove(data.settings.autoApproveFree);
           if (data.settings.adminPath) setSysAdminPath(data.settings.adminPath);
         }
       })
@@ -81,12 +83,12 @@ export default function AdminPanel() {
   };
 
   // 🚨 SMART ERROR TRACKER (Ise Update Kiya Hai)
-  const saveSystemSettings = async (updatedCategories, updatedFacilities, updatedPricing, updatedAdminPath) => {
+  const saveSystemSettings = async (updatedCategories, updatedFacilities, updatedPricing, updatedAdminPath, updatedAutoApprove) => {
     try {
       const res = await fetch(`${ADMIN_API}/settings`, { 
         method: 'POST', 
         headers: { 'Content-Type': 'application/json', ...adminAuthHeaders() },
-        body: JSON.stringify({ categories: updatedCategories || sysCategories, facilities: updatedFacilities || sysFacilities, pricing: updatedPricing || sysPricing, adminPath: updatedAdminPath !== undefined ? updatedAdminPath : sysAdminPath })
+        body: JSON.stringify({ categories: updatedCategories || sysCategories, facilities: updatedFacilities || sysFacilities, pricing: updatedPricing || sysPricing, adminPath: updatedAdminPath !== undefined ? updatedAdminPath : sysAdminPath, autoApproveFree: updatedAutoApprove !== undefined ? updatedAutoApprove : sysAutoApprove })
       });
       
       const textData = await res.text(); 
@@ -131,6 +133,16 @@ export default function AdminPanel() {
 
   const handleApprove = async (id) => { try { await fetch(`${API_URL}/${id}/approve`, { method: 'PATCH', headers: adminAuthHeaders() }); setRefreshKey(k => k + 1); } catch { /* approve fail: silent */ } };
   const handleDelete = async (id) => { if (!window.confirm("⚠️ Room delete karna hai? Ye action wapas nahi hoga.")) return; try { await fetch(`${API_URL}/${id}`, { method: 'DELETE', headers: adminAuthHeaders() }); setRefreshKey(k => k + 1); } catch { /* delete fail: silent */ } };
+
+  // 🎯 Banner approve/revoke (payment verify ke baad)
+  const handleBannerApprove = async (id, approve) => {
+    try {
+      const res = await fetch(`${API_URL}/${id}/banner`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', ...adminAuthHeaders() }, body: JSON.stringify({ approve }) });
+      const data = await res.json();
+      alert(data.message);
+      if (data.success) setRefreshKey(k => k + 1);
+    } catch { alert('Server connection failed.'); }
+  };
 
   // Purane (Render-time) ads ko email wale account se link karo (one-time)
   const handleMigrateRooms = async () => {
@@ -235,6 +247,18 @@ export default function AdminPanel() {
                     {(room.promoRequested && room.promoRequested !== 'regular') ? ('⭐ Promo ' + room.promoRequested + ' Days — payment verify karke Approve dabayein') : 'Regular Ad'}
                   </span>
                 </div>
+                {room.bannerRequested && !room.isBannerActive && (
+                  <div className="bg-purple-50 border border-purple-200 p-3 rounded-xl flex justify-between items-center">
+                    <p className="text-xs font-bold text-purple-800">🎯 Banner Req{room.bannerRef ? (<span className="font-black"> • Ref: {room.bannerRef}</span>) : null}</p>
+                    <button onClick={() => handleBannerApprove(room._id, true)} className="bg-purple-600 text-white px-3 py-2 rounded-lg text-[11px] font-black active:scale-95 shrink-0 ml-2">Approve Banner</button>
+                  </div>
+                )}
+                {room.isBannerActive && (
+                  <div className="bg-purple-50 border border-purple-200 p-3 rounded-xl flex justify-between items-center">
+                    <p className="text-xs font-bold text-purple-800">🎯 Banner LIVE</p>
+                    <button onClick={() => handleBannerApprove(room._id, false)} className="bg-gray-200 text-gray-600 px-3 py-2 rounded-lg text-[11px] font-black active:scale-95 shrink-0 ml-2">Remove</button>
+                  </div>
+                )}
                 <div className="flex gap-2 mt-1">
                   <button onClick={() => handleApprove(room._id)} className="flex-1 bg-green-500 text-white py-3 rounded-xl text-sm font-black flex items-center justify-center gap-1.5 active:scale-95 transition-transform shadow-lg shadow-green-500/20"><Check size={18} strokeWidth={3}/> Verify Payment & Approve</button>
                   <button onClick={() => handleDelete(room._id)} className="w-14 bg-red-50 text-red-600 flex items-center justify-center rounded-xl active:scale-95 transition-transform border border-red-100"><X size={20} strokeWidth={3}/></button>
@@ -298,6 +322,13 @@ export default function AdminPanel() {
                   <input type="email" value={migrateEmail} onChange={(e) => setMigrateEmail(e.target.value)} placeholder="user@email.com" className="flex-1 p-3 bg-gray-50 rounded-xl outline-none font-bold text-sm border" />
                   <button onClick={handleMigrateRooms} className="bg-blue-600 text-white px-4 rounded-xl font-black text-sm active:scale-95">Migrate</button>
                 </div>
+              </div>
+
+              {/* Auto-approve FREE ads toggle */}
+              <div className="bg-white p-5 rounded-2xl shadow-sm border border-green-200">
+                <h3 className="font-black text-gray-800 mb-1">🟢 Free Ads Auto-Approve</h3>
+                <p className="text-[11px] font-bold text-gray-500 mb-3">ON = free/regular ads seedha live (bina review). OFF = admin verification ke baad. Paid/promo HAMESHA review mangte hain.</p>
+                <button onClick={() => { const v = !sysAutoApprove; if (window.confirm(v ? "Free ads seedha LIVE honge. Continue?" : "Free ads phir se review me jayenge. Continue?")) { setSysAutoApprove(v); saveSystemSettings(sysCategories, sysFacilities, sysPricing, sysAdminPath, v); } }} className={`w-full py-3 rounded-xl font-black text-sm active:scale-95 transition-colors ${sysAutoApprove ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-500'}`}>{sysAutoApprove ? '✅ ON — Free ads seedha live' : 'OFF — Free ads review me'}</button>
               </div>
              
              {/* UPI Card */}
@@ -418,7 +449,12 @@ export default function AdminPanel() {
                </div>
                <div><label className="text-xs font-bold text-gray-500">7 Days Promo (₹)</label><input type="number" value={sysPricing.promo7} onChange={(e) => setSysPricing({...sysPricing, promo7: e.target.value})} className="w-full p-3 bg-gray-50 rounded-xl font-bold border mt-1 outline-none" /></div>
                <div><label className="text-xs font-bold text-gray-500">15 Days Promo (₹)</label><input type="number" value={sysPricing.promo15} onChange={(e) => setSysPricing({...sysPricing, promo15: e.target.value})} className="w-full p-3 bg-gray-50 rounded-xl font-bold border mt-1 outline-none" /></div>
-               <div><label className="text-xs font-bold text-gray-500">30 Days Promo (₹)</label><input type="number" value={sysPricing.promo30} onChange={(e) => setSysPricing({...sysPricing, promo30: e.target.value})} className="w-full p-3 bg-gray-50 rounded-xl font-bold border mt-1 outline-none" /></div>
+                <div><label className="text-xs font-bold text-gray-500">30 Days Promo (₹)</label><input type="number" value={sysPricing.promo30} onChange={(e) => setSysPricing({...sysPricing, promo30: e.target.value})} className="w-full p-3 bg-gray-50 rounded-xl font-bold border mt-1 outline-none" /></div>
+                <div className="p-3 bg-purple-50 rounded-xl border border-purple-100">
+                  <label className="text-xs font-black text-purple-700 uppercase">🎯 Banner Add-on Price (₹)</label>
+                  <input type="number" value={sysPricing.bannerPrice || ''} onChange={(e) => setSysPricing({...sysPricing, bannerPrice: e.target.value})} className="w-full p-2 bg-white rounded-lg font-bold border mt-1 outline-none" />
+                </div>
+                <div><label className="text-xs font-bold text-gray-500">Banner Duration (din)</label><input type="number" value={sysPricing.bannerDays || ''} onChange={(e) => setSysPricing({...sysPricing, bannerDays: e.target.value})} className="w-full p-3 bg-gray-50 rounded-xl font-bold border mt-1 outline-none" /></div>
              </div>
              <button className="w-full bg-orange-500 text-white py-3 rounded-xl font-black text-sm active:scale-95" onClick={() => { saveSystemSettings(sysCategories, sysFacilities, sysPricing); setShowPromoModal(false); }}>Update Database</button>
           </div>
