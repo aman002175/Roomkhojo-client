@@ -4,6 +4,7 @@ import * as maplibregl from 'maplibre-gl'; // v6 ESM-only: namespace import (def
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { X, Phone, MessageCircle, Map as MapIcon, List, Plus, Camera, Target, Info, FileText, Shield, ChevronRight, Menu, User, MapPin, Lock, Search, Navigation, AlertTriangle, Heart, Share2, Megaphone, Landmark, TrainFront, Bus, Hospital, Stethoscope, GraduationCap, School, BookOpen, Star, Satellite, Ruler, Send, Copy, Home, Users, Building2, Briefcase, Hotel, Check, Tag, Image as ImageIcon } from 'lucide-react';
 import { GoogleLogin } from '@react-oauth/google';
+import { markerIcon, ICON_STAR } from './markerIcons';
 
 const VITE_API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const BASE_URL = VITE_API_BASE_URL ? VITE_API_BASE_URL.replace('/api', '') : 'https://roomkhojo-api.onrender.com';
@@ -117,9 +118,6 @@ const PoiIcon = ({ cat, size = 14, className = '' }) => {
 // Category → professional icon (custom categories par Tag fallback)
 const CAT_ICONS = { all: Home, PG: Users, Flat: Building2, Room: Home, Hostel: Hotel, Library: BookOpen, Office: Briefcase };
 const catIcon = (id) => CAT_ICONS[id] || Tag;
-
-// Map marker star (static lucide SVG — user-data nahi, XSS-safe)
-const STAR_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>';
 
 // Overpass API (free, no key): 1.5km me coaching/hospital/bus/railway dhoondo
 const fetchNearbyPOI = async (lat, lng, radius = 1500) => {
@@ -768,17 +766,19 @@ export default function MainApp() {
     markersRef.current.forEach(m => m.remove()); markersRef.current = [];
     sortedRooms.forEach(room => {
       const isSelected = selectedRoom && selectedRoom._id === room._id;
-      const el = document.createElement('div'); 
-      el.className = `font-bold px-3 py-1.5 rounded-full shadow-lg border-2 border-white text-xs cursor-pointer transition-all duration-300 flex items-center gap-1 ${room.isPromoted ? 'bg-orange-500 z-20 text-white' : 'bg-green-600 z-10 text-white'} ${isSelected ? '-translate-y-3 scale-110 shadow-2xl z-40' : 'active:scale-90'}`;
-      if (room.isPromoted) {
-        // Static SVG + textContent (user-data kabhi innerHTML me nahi — XSS-safe)
-        el.innerHTML = STAR_SVG;
-        const sp = document.createElement('span');
-        sp.textContent = room.price;
-        el.appendChild(sp);
-      } else {
-        el.textContent = room.price;
-      }
+      const el = document.createElement('div');
+      // Select hone par: ye POP-UP (upar+zoom), baaki FADE (halke)
+      const popCls = !selectedRoom
+        ? 'active:scale-90'
+        : isSelected
+          ? '-translate-y-4 scale-125 shadow-2xl z-40'
+          : 'opacity-40 saturate-50';
+      el.className = `font-bold px-3 py-1.5 rounded-full shadow-lg border-2 border-white text-xs cursor-pointer transition-all duration-300 flex items-center gap-1 ${room.isPromoted ? 'bg-orange-500 z-20 text-white' : 'bg-green-600 z-10 text-white'} ${popCls}`;
+      // Static SVG icon (category/star) + textContent price (user-data kabhi innerHTML me nahi — XSS-safe)
+      el.innerHTML = room.isPromoted ? ICON_STAR : markerIcon(room.category);
+      const sp = document.createElement('span');
+      sp.textContent = room.price;
+      el.appendChild(sp);
       const onClick = (e) => { e.stopPropagation(); openRoomPopup(room); map.current.flyTo({ center: [room.lng, room.lat], zoom: 15.5 }); };
       el.addEventListener('click', onClick); el.addEventListener('touchstart', onClick);
       const marker = new maplibregl.Marker({ element: el }).setLngLat([room.lng, room.lat]).addTo(map.current); markersRef.current.push(marker);
