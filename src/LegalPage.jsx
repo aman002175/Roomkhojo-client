@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Info, FileText, Shield, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Info, FileText, Shield, ExternalLink, Heart } from 'lucide-react';
 
 // =============================================
 // PAGE DATA
@@ -9,7 +9,6 @@ const pages = {
     title: 'About Us',
     icon: <Info size={28} className="text-white" />,
     gradient: 'from-brand to-blue-600',
-    emoji: '🏠',
     sections: [
       {
         heading: 'Hamari Kahani',
@@ -21,7 +20,7 @@ const pages = {
       },
       {
         heading: 'Kyun RoomKhojo?',
-        body: '✅ Real listings — koi fake ads nahi\n✅ Map-based search — aas paas ke rooms dekho\n✅ Direct contact — koi middleman nahi\n✅ Free listing — owners ke liye bilkul muft',
+        body: '• Real listings — koi fake ads nahi\n• Map-based search — aas paas ke rooms dekho\n• Direct contact — koi middleman nahi\n• Free listing — owners ke liye bilkul muft',
       },
     ],
   },
@@ -29,7 +28,6 @@ const pages = {
     title: 'Terms & Conditions',
     icon: <FileText size={28} className="text-white" />,
     gradient: 'from-purple-500 to-indigo-600',
-    emoji: '📋',
     sections: [
       {
         heading: '1. Ad Approval Process',
@@ -53,7 +51,6 @@ const pages = {
     title: 'Refund Policy',
     icon: <Shield size={28} className="text-white" />,
     gradient: 'from-orange-500 to-red-500',
-    emoji: '💰',
     sections: [
       {
         heading: '1. Strict No-Refund Policy',
@@ -135,7 +132,7 @@ export default function LegalPage({ type }) {
             rel="noreferrer"
             className="flex items-center gap-1.5 text-sm font-black text-gray-500 hover:text-brand transition-colors active:scale-95"
           >
-            Built with 💝 by Aman Bishnoi
+            Built with <Heart size={13} fill="currentColor" className="inline text-brand" /> by Aman Bishnoi
             <ExternalLink size={13} className="opacity-60" />
           </a>
           <p className="text-gray-300 text-xs font-bold mt-1">© 2025 29 Dev's. All rights reserved.</p>

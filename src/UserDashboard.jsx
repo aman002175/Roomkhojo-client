@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User, LogOut, Star, ArrowLeft, Settings, Bell, MapPin, Trash2, Edit3, X, Camera, ShieldAlert, Phone } from 'lucide-react';
+import { User, LogOut, Star, ArrowLeft, Settings, Bell, MapPin, Trash2, Edit3, X, Camera, ShieldAlert, Phone, Clock, Eye, Heart, RefreshCw, Link, AlertTriangle } from 'lucide-react';
 
 const VITE_API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const BASE_URL = VITE_API_BASE_URL ? VITE_API_BASE_URL.replace('/api', '') : 'https://roomkhojo-api.onrender.com';
@@ -91,7 +91,7 @@ export default function UserDashboard() {
   };
 
   const deleteRoom = async (roomId) => {
-    if (!window.confirm("⚠️ Kya aap sach mein is Ad ko hamesha ke liye Delete karna chahte hain?")) return;
+    if (!window.confirm("Kya aap sach mein is Ad ko hamesha ke liye Delete karna chahte hain?")) return;
     try {
       const res = await fetch(`${BASE_URL}/api/rooms/${roomId}`, { method: 'DELETE', headers: authHeaders() });
       const data = await res.json();
@@ -130,7 +130,7 @@ export default function UserDashboard() {
       const data = await res.json();
       
       if(data.success) {
-        alert("✅ Ad Updated! Admin approval ke liye bhej diya gaya hai (Pending Mode).");
+        alert("Ad Updated! Admin approval ke liye bhej diya gaya hai (Pending Mode).");
         setIsEditModalOpen(false);
         setRefreshKey(k => k + 1); // Refresh data
       }
@@ -233,7 +233,7 @@ export default function UserDashboard() {
         {myRooms.length === 0 ? (
             <div className="space-y-4">
               <div className="bg-blue-50 p-5 rounded-3xl border border-blue-200 text-center">
-                <p className="font-black text-blue-900 mb-1">🔗 Purane ads hain?</p>
+                <p className="font-black text-blue-900 mb-1 flex items-center justify-center gap-1.5"><Link size={16} /> Purane ads hain?</p>
                 <p className="text-xs font-bold text-blue-700 mb-3">Puraani site wale ads ek tap me link karo (admin ki zaroorat nahi).</p>
                 <button onClick={handleClaimOrphans} className="bg-blue-600 text-white px-5 py-3 rounded-2xl font-black text-sm active:scale-95">Mere Purane Ads Link Karo</button>
               </div>
@@ -255,13 +255,13 @@ export default function UserDashboard() {
                           </div>
                         )}
                         {room.isApproved && isExpired && (
-                          <div className="absolute top-0 left-0 right-0 bg-red-500 text-white text-[10px] font-black text-center py-1 uppercase tracking-widest z-10 shadow-sm">
-                            ⚠️ Promo Plan Expired (Hidden from map)
+                          <div className="absolute top-0 left-0 right-0 bg-red-500 text-white text-[10px] font-black text-center py-1 uppercase tracking-widest z-10 shadow-sm flex items-center justify-center gap-1">
+                            <AlertTriangle size={12} /> Promo Plan Expired (Hidden from map)
                           </div>
                         )}
                         {room.isApproved && isExpiringSoon && (
-                          <div className="absolute top-0 left-0 right-0 bg-orange-500 text-white text-[10px] font-black text-center py-1 uppercase tracking-widest z-10 shadow-sm">
-                            ⏱️ Expiring in {daysLeft} Days
+                          <div className="absolute top-0 left-0 right-0 bg-orange-500 text-white text-[10px] font-black text-center py-1 uppercase tracking-widest z-10 shadow-sm flex items-center justify-center gap-1">
+                            <Clock size={12} /> Expiring in {daysLeft} Days
                           </div>
                         )}
 
@@ -271,17 +271,18 @@ export default function UserDashboard() {
                               <div>
                                   <div className="flex justify-between items-start">
                                       <h3 className="font-black text-gray-800 leading-tight line-clamp-1">{room.title}</h3>
-                                      {room.isPromoted && <span className="text-[10px] bg-orange-100 text-orange-600 px-2 py-1 rounded-lg font-black uppercase shrink-0 ml-2">⭐ Promoted</span>}
+                                      {room.isPromoted && <span className="text-[10px] bg-orange-100 text-orange-600 px-2 py-1 rounded-lg font-black uppercase shrink-0 ml-2 inline-flex items-center gap-1"><Star size={10} fill="currentColor" /> Promoted</span>}
                                   </div>
                                   <p className="text-brand font-black mt-1">{room.price}</p>
                                   <p className="text-xs font-bold text-gray-400 mt-1 flex items-center gap-1"><MapPin size={12}/> {room.landmark || 'Hanumangarh'}</p>
                               </div>
                               <div className="mt-2 flex items-center gap-2">
-                                <span className={`text-[10px] font-black px-2 py-1 rounded-lg ${room.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
-                                  {room.isActive ? '🟢 Active' : '🔴 Inactive'}
+                                <span className={`text-[10px] font-black px-2 py-1 rounded-lg inline-flex items-center gap-1.5 ${room.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+                                  <span className={`w-2 h-2 rounded-full ${room.isActive ? 'bg-green-500' : 'bg-red-500'}`} />
+                                  {room.isActive ? 'Active' : 'Inactive'}
                                 </span>
-                                <span className="text-[10px] font-black px-2 py-1 rounded-lg bg-blue-50 text-blue-700">
-                                  👁 {room.views || 0}
+                                <span className="text-[10px] font-black px-2 py-1 rounded-lg bg-blue-50 text-blue-700 inline-flex items-center gap-1">
+                                  <Eye size={12} /> {room.views || 0}
                                 </span>
                                 {daysLeft !== null && daysLeft > 3 && (
                                   <span className="text-[10px] font-bold text-gray-500">{daysLeft} Days Left</span>
@@ -294,7 +295,7 @@ export default function UserDashboard() {
                           <button onClick={() => toggleRoomStatus(room._id)} className="text-[10px] font-bold text-gray-500 border border-gray-200 bg-gray-50 px-3 py-1.5 rounded-lg active:scale-95 transition-colors hover:bg-gray-100">Hide/Show</button>
                           <div className="flex gap-2">
                             {/* 🔄 RENEW BUTTON (expired promo par) */}
-                            {isExpired && (<button onClick={() => { setRenewRoom(room); setRenewPlan(room.promoPlan && room.promoPlan !== 'regular' ? room.promoPlan : '7'); setRenewRef(''); }} className="text-[11px] font-black text-white bg-orange-500 px-3 py-1.5 rounded-lg active:scale-95 flex items-center gap-1">🔄 Renew</button>)}
+                            {isExpired && (<button onClick={() => { setRenewRoom(room); setRenewPlan(room.promoPlan && room.promoPlan !== 'regular' ? room.promoPlan : '7'); setRenewRef(''); }} className="text-[11px] font-black text-white bg-orange-500 px-3 py-1.5 rounded-lg active:scale-95 flex items-center gap-1"><RefreshCw size={12} /> Renew</button>)}
                             {/* 🚨 EDIT BUTTON */}
                             <button onClick={() => openEditModal(room)} className="text-[11px] font-black text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg active:scale-95 flex items-center gap-1 transition-colors hover:bg-blue-100"><Edit3 size={14}/> Edit</button>
                             <button onClick={() => deleteRoom(room._id)} className="text-[11px] font-black text-red-600 bg-red-50 p-1.5 px-3 rounded-lg active:scale-95 flex items-center gap-1 transition-colors hover:bg-red-100"><Trash2 size={14}/> Delete</button>
@@ -314,7 +315,7 @@ export default function UserDashboard() {
         <div className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4">
           <div className="bg-white w-full max-w-md rounded-t-[30px] sm:rounded-3xl p-6 shadow-2xl relative">
             <button onClick={() => setRenewRoom(null)} className="absolute top-4 right-4 bg-gray-100 p-2 rounded-full active:scale-90"><X size={20}/></button>
-            <h2 className="text-xl font-black mb-1">🔄 Renew Promo</h2>
+            <h2 className="text-xl font-black mb-1 flex items-center gap-2"><RefreshCw size={20} /> Renew Promo</h2>
             <p className="text-xs font-bold text-gray-500 mb-4 line-clamp-1">{renewRoom.title}</p>
             <div className="flex gap-2 mb-4">
               {['7', '15', '30'].map(d => (
@@ -333,7 +334,7 @@ export default function UserDashboard() {
         <div className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4">
           <div className="bg-white w-full max-w-md rounded-t-[30px] sm:rounded-3xl flex flex-col max-h-[85dvh] shadow-2xl relative">
             <div className="p-5 border-b shrink-0 flex justify-between items-center sticky top-0 bg-white rounded-t-[30px] sm:rounded-t-3xl z-10">
-              <h2 className="text-xl font-black">⚙️ Settings</h2>
+              <h2 className="text-xl font-black flex items-center gap-2"><Settings size={20} /> Settings</h2>
               <button onClick={() => setSettingsOpen(false)} className="bg-gray-100 p-2 rounded-full active:scale-90"><X size={20}/></button>
             </div>
             <div className="p-5 overflow-y-auto space-y-5 flex-1">
@@ -362,7 +363,7 @@ export default function UserDashboard() {
       {savedRooms.length > 0 && (
         <div className="mt-6">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-black text-gray-800">❤️ Saved Ads</h2>
+            <h2 className="text-xl font-black text-gray-800 flex items-center gap-2"><Heart size={20} className="text-pink-500" fill="currentColor" /> Saved Ads</h2>
             <span className="bg-pink-100 text-pink-600 px-3 py-1 rounded-full text-xs font-black">{savedRooms.length} Total</span>
           </div>
           <div className="grid gap-3 pb-10">
@@ -372,7 +373,7 @@ export default function UserDashboard() {
                 <div className="flex-1 min-w-0">
                   <h3 className="font-black text-gray-800 leading-tight truncate">{room.title}</h3>
                   <p className="text-brand font-black text-sm">{room.price}</p>
-                  <p className="text-[11px] font-bold text-gray-400">📍 {room.landmark || 'Hanumangarh'}</p>
+                  <p className="text-[11px] font-bold text-gray-400 flex items-center gap-1"><MapPin size={12} className="shrink-0" /> {room.landmark || 'Hanumangarh'}</p>
                 </div>
                 <div className="flex flex-col gap-2 shrink-0">
                   <a href={`tel:${room.mobile}`} className="bg-brand text-white p-2 rounded-xl flex items-center justify-center active:scale-95"><Phone size={16}/></a>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { User, LogOut, LayoutDashboard, Check, X, Settings, Lock, ShieldAlert, Save, Plus, BarChart3, Clock, MessageCircle, Smartphone, AlertTriangle } from 'lucide-react';
+import { User, LogOut, LayoutDashboard, Check, X, Settings, Lock, ShieldAlert, Save, Plus, BarChart3, Clock, MessageCircle, Smartphone, AlertTriangle, MapPin, Star, Megaphone, Link, Crown } from 'lucide-react';
 
 const VITE_API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const BASE_URL = VITE_API_BASE_URL ? VITE_API_BASE_URL.replace('/api', '') : 'https://roomkhojo-api.onrender.com';
@@ -74,7 +74,7 @@ export default function AdminPanel() {
   const handleChangeCredentials = async () => {
     if (!oldPass) return alert("Old Password zaroori hai!");
     if (!newAdminUser && !newAdminPass) return alert("New credentials daliye!");
-    if (!window.confirm("⚠️ WARNING: Kya aap sach mein Admin Username/Password change karna chahte hain?")) return;
+    if (!window.confirm("WARNING: Kya aap sach mein Admin Username/Password change karna chahte hain?")) return;
     try {
       const res = await fetch(`${ADMIN_API}/change-credentials`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...adminAuthHeaders() }, body: JSON.stringify({ oldPassword: oldPass, newUsername: newAdminUser, newPassword: newAdminPass }) });
       const data = await res.json(); alert(data.message);
@@ -95,15 +95,15 @@ export default function AdminPanel() {
       try {
           const data = JSON.parse(textData);
           if (data.success) {
-              alert("✅ Settings & UPI ID Successfully Saved!");
+              alert("Settings & UPI ID Successfully Saved!");
           } else {
-              alert("❌ Backend Error: " + data.message);
+              alert("Backend Error: " + data.message);
           }
       } catch {
-          alert("❌ Server Error/Crash! Backend terminal check karein. Response: " + textData.substring(0, 100));
+          alert("Server Error/Crash! Backend terminal check karein. Response: " + textData.substring(0, 100));
       }
     } catch { 
-      alert("❌ Connection Error: Backend server band ho gaya hai. Apna Termux check karein."); 
+      alert("Connection Error: Backend server band ho gaya hai. Apna Termux check karein."); 
     }
   };
 
@@ -132,7 +132,7 @@ export default function AdminPanel() {
   };
 
   const handleApprove = async (id) => { try { await fetch(`${API_URL}/${id}/approve`, { method: 'PATCH', headers: adminAuthHeaders() }); setRefreshKey(k => k + 1); } catch { /* approve fail: silent */ } };
-  const handleDelete = async (id) => { if (!window.confirm("⚠️ Room delete karna hai? Ye action wapas nahi hoga.")) return; try { await fetch(`${API_URL}/${id}`, { method: 'DELETE', headers: adminAuthHeaders() }); setRefreshKey(k => k + 1); } catch { /* delete fail: silent */ } };
+  const handleDelete = async (id) => { if (!window.confirm("Room delete karna hai? Ye action wapas nahi hoga.")) return; try { await fetch(`${API_URL}/${id}`, { method: 'DELETE', headers: adminAuthHeaders() }); setRefreshKey(k => k + 1); } catch { /* delete fail: silent */ } };
 
   // 🎯 Banner approve/revoke (payment verify ke baad)
   const handleBannerApprove = async (id, approve) => {
@@ -194,7 +194,7 @@ export default function AdminPanel() {
           <div className="w-10 h-10 bg-brand rounded-xl flex items-center justify-center shadow-lg shadow-brand/30"><User size={20} className="shrink-0 text-white"/></div>
           <div>
             <h1 className="font-black text-lg leading-tight">Admin Console</h1>
-            <p className="text-[10px] font-bold text-slate-400">Welcome back, Boss! 👑</p>
+            <p className="text-[10px] font-bold text-slate-400 flex items-center gap-1">Welcome back, Boss! <Crown size={12} className="text-amber-400" /></p>
           </div>
         </div>
         <div className="flex gap-2">
@@ -217,7 +217,7 @@ export default function AdminPanel() {
         {activeTab === 'analytics' && (
           <div className="space-y-4 pb-10">
             <div className="grid grid-cols-2 gap-3"><div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100"><p className="text-xs font-bold text-gray-500 uppercase">Registered Users</p><p className="text-2xl font-black text-gray-800">{uniqueUsersCount}</p></div><div className="bg-green-50 p-4 rounded-2xl shadow-sm border border-green-100"><p className="text-xs font-bold text-green-700 uppercase">Est. Revenue</p><p className="text-2xl font-black text-green-800">₹{estRevenue}</p></div><div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100"><p className="text-xs font-bold text-gray-500 uppercase">Total Ads</p><p className="text-2xl font-black text-gray-800">{adminRooms.length}</p></div><div className="bg-orange-50 p-4 rounded-2xl shadow-sm border border-orange-100"><p className="text-xs font-bold text-orange-700 uppercase">Promo Ads</p><p className="text-2xl font-black text-orange-800">{promotedCount}</p></div></div>
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden mt-4"><div className="p-4 border-b bg-gray-50"><h3 className="font-black text-gray-800 flex items-center gap-2"><Clock size={18}/> Users & Ad Status Report</h3></div><div className="p-0 overflow-x-auto"><table className="w-full text-left text-sm whitespace-nowrap"><thead className="bg-gray-50 text-gray-500 text-xs uppercase font-bold border-b"><tr><th className="p-3">User/Owner</th><th className="p-3">Ad Title</th><th className="p-3 text-brand">Pay Code</th><th className="p-3">Plan</th><th className="p-3">Status</th><th className="p-3">Action</th></tr></thead><tbody className="divide-y divide-gray-100">{adminRooms.map(room => (<tr key={room._id} className="hover:bg-gray-50"><td className="p-3 font-bold text-gray-800"><div className="flex items-center gap-2"><div className="w-6 h-6 bg-brand/10 text-brand rounded-full flex justify-center items-center text-[10px] shrink-0"><User size={12}/></div>{room.ownerName || 'Owner'}</div></td><td className="p-3 text-gray-600 line-clamp-1 max-w-[150px]">{room.title}</td><td className="p-3 font-black text-brand bg-brand/5 border-x">{room.paymentCode || 'FREE'}</td><td className="p-3">{room.isPromoted ? <span className="bg-orange-100 text-orange-700 px-2 py-1 rounded text-xs font-bold">Promo {room.promoPlan}D</span> : <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs font-bold">Regular</span>}</td><td className="p-3">{getDaysLeft(room.expiryDate, room.promoPlan)}</td><td className="p-3"><a href={`https://wa.me/91${room.mobile}?text=${encodeURIComponent(`Namaste ${room.ownerName || 'Owner'}!\nRoomKhojo par aapka Ad ("${room.title}") jald hi expire hone wala hai.`)}`} target="_blank" rel="noreferrer" className="bg-[#25D366]/10 text-[#25D366] px-3 py-1.5 rounded-lg text-xs font-black flex items-center justify-center gap-1 active:scale-95 transition-transform w-fit"><MessageCircle size={14}/> Alert</a></td></tr>))}</tbody></table></div></div>
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden mt-4"><div className="p-4 border-b bg-gray-50"><h3 className="font-black text-gray-800 flex items-center gap-2"><Clock size={18}/> Users & Ad Status Report</h3></div><div className="p-0 overflow-x-auto"><table className="w-full text-left text-sm whitespace-nowrap"><thead className="bg-gray-50 text-gray-500 text-xs uppercase font-bold border-b"><tr><th className="p-3">User/Owner</th><th className="p-3">Ad Title</th><th className="p-3 text-brand">Pay Code</th><th className="p-3">Plan</th><th className="p-3">Status</th><th className="p-3">Action</th></tr></thead><tbody className="divide-y divide-gray-100">{adminRooms.map(room => (<tr key={room._id} className="hover:bg-gray-50"><td className="p-3 font-bold text-gray-800"><div className="flex items-center gap-2"><div className="w-6 h-6 bg-brand/10 text-brand rounded-full flex justify-center items-center text-[10px] shrink-0"><User size={12}/></div>{room.ownerName || 'Owner'}</div></td><td className="p-3 text-gray-600 line-clamp-1 max-w-[150px]">{room.title}</td><td className="p-3 font-black text-brand bg-brand/5 border-x">{room.paymentCode || 'FREE'}</td><td className="p-3">{room.isPromoted ? <span className="bg-orange-100 text-orange-700 px-2 py-1 rounded text-xs font-bold inline-flex items-center gap-1"><Star size={11} fill="currentColor" /> Promo {room.promoPlan}D</span> : <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs font-bold">Regular</span>}</td><td className="p-3">{getDaysLeft(room.expiryDate, room.promoPlan)}</td><td className="p-3"><a href={`https://wa.me/91${room.mobile}?text=${encodeURIComponent(`Namaste ${room.ownerName || 'Owner'}!\nRoomKhojo par aapka Ad ("${room.title}") jald hi expire hone wala hai.`)}`} target="_blank" rel="noreferrer" className="bg-[#25D366]/10 text-[#25D366] px-3 py-1.5 rounded-lg text-xs font-black flex items-center justify-center gap-1 active:scale-95 transition-transform w-fit"><MessageCircle size={14}/> Alert</a></td></tr>))}</tbody></table></div></div>
           </div>
         )}
 
@@ -237,25 +237,25 @@ export default function AdminPanel() {
                     </div>
                     <p className="text-brand font-black mt-0.5">{room.price} <span className="text-xs text-gray-400 font-bold ml-1">({room.category} • {room.type})</span></p>
                     <p className="text-gray-500 text-xs font-bold mt-1.5 flex items-center gap-1"><User size={12}/> {room.ownerName || 'Owner'} <span className="mx-1">•</span> <Smartphone size={12}/> {room.mobile}</p>
-                    <p className="text-gray-500 text-[10px] font-bold mt-1 line-clamp-1">📍 {room.landmark || 'N/A'}</p>
+                    <p className="text-gray-500 text-xs font-bold mt-1.5 flex items-center gap-1"><MapPin size={12} className="shrink-0" /> {room.landmark || 'N/A'}</p>
                     {room.description && <p className="text-gray-400 text-[10px] font-bold mt-1.5 bg-gray-50 p-2 rounded-lg border border-gray-100 leading-tight">{room.description}</p>}
                   </div>
                 </div>
                 <div className="bg-orange-50 border border-orange-200 p-3 rounded-xl flex justify-between items-center shadow-inner">
                   <p className="text-xs font-bold text-orange-800">Pay Code: <span className="font-black text-lg tracking-widest ml-1">{room.paymentCode || 'FREE'}</span>{room.paymentRef ? (<span className="block text-[10px] mt-0.5">UPI Ref: {room.paymentRef}</span>) : null}</p>
                   <span className="text-[10px] font-black bg-white px-2 py-1 rounded-md text-orange-600 shadow-sm border border-orange-100">
-                    {(room.promoRequested && room.promoRequested !== 'regular') ? ('⭐ Promo ' + room.promoRequested + ' Days — payment verify karke Approve dabayein') : 'Regular Ad'}
+                    {(room.promoRequested && room.promoRequested !== 'regular') ? (<span className="inline-flex items-center gap-1"><Star size={11} fill="currentColor" /> Promo {room.promoRequested} Days — payment verify karke Approve dabayein</span>) : 'Regular Ad'}
                   </span>
                 </div>
                 {room.bannerRequested && !room.isBannerActive && (
                   <div className="bg-purple-50 border border-purple-200 p-3 rounded-xl flex justify-between items-center">
-                    <p className="text-xs font-bold text-purple-800">🎯 Banner Req{room.bannerRef ? (<span className="font-black"> • Ref: {room.bannerRef}</span>) : null}</p>
+                    <p className="text-xs font-bold text-purple-800 flex items-center gap-1"><Megaphone size={13} className="shrink-0" /> Banner Req{room.bannerRef ? (<span className="font-black"> • Ref: {room.bannerRef}</span>) : null}</p>
                     <button onClick={() => handleBannerApprove(room._id, true)} className="bg-purple-600 text-white px-3 py-2 rounded-lg text-[11px] font-black active:scale-95 shrink-0 ml-2">Approve Banner</button>
                   </div>
                 )}
                 {room.isBannerActive && (
                   <div className="bg-purple-50 border border-purple-200 p-3 rounded-xl flex justify-between items-center">
-                    <p className="text-xs font-bold text-purple-800">🎯 Banner LIVE</p>
+                    <p className="text-xs font-bold text-purple-800 flex items-center gap-1"><Megaphone size={13} className="shrink-0" /> Banner LIVE</p>
                     <button onClick={() => handleBannerApprove(room._id, false)} className="bg-gray-200 text-gray-600 px-3 py-2 rounded-lg text-[11px] font-black active:scale-95 shrink-0 ml-2">Remove</button>
                   </div>
                 )}
@@ -316,7 +316,7 @@ export default function AdminPanel() {
            <div className="space-y-4 pb-10">
               {/* Purane Ads Migrate (one-time) */}
               <div className="bg-white p-5 rounded-2xl shadow-sm border border-blue-200">
-                <h3 className="font-black text-gray-800 mb-1">🔗 Purane Ads Link Karo</h3>
+                <h3 className="font-black text-gray-800 mb-1 flex items-center gap-1.5"><Link size={16} className="text-blue-600" /> Purane Ads Link Karo</h3>
                 <p className="text-[11px] font-bold text-gray-500 mb-3">Render wale time ke ads (puraani login IDs wale) ko kisi email wale account se jod do. Sirf bina-link ads move honge, linked ads safe rahenge.</p>
                 <div className="flex gap-2">
                   <input type="email" value={migrateEmail} onChange={(e) => setMigrateEmail(e.target.value)} placeholder="user@email.com" className="flex-1 p-3 bg-gray-50 rounded-xl outline-none font-bold text-sm border" />
@@ -326,9 +326,9 @@ export default function AdminPanel() {
 
               {/* Auto-approve FREE ads toggle */}
               <div className="bg-white p-5 rounded-2xl shadow-sm border border-green-200">
-                <h3 className="font-black text-gray-800 mb-1">🟢 Free Ads Auto-Approve</h3>
+                <h3 className="font-black text-gray-800 mb-1">Free Ads Auto-Approve</h3>
                 <p className="text-[11px] font-bold text-gray-500 mb-3">ON = free/regular ads seedha live (bina review). OFF = admin verification ke baad. Paid/promo HAMESHA review mangte hain.</p>
-                <button onClick={() => { const v = !sysAutoApprove; if (window.confirm(v ? "Free ads seedha LIVE honge. Continue?" : "Free ads phir se review me jayenge. Continue?")) { setSysAutoApprove(v); saveSystemSettings(sysCategories, sysFacilities, sysPricing, sysAdminPath, v); } }} className={`w-full py-3 rounded-xl font-black text-sm active:scale-95 transition-colors ${sysAutoApprove ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-500'}`}>{sysAutoApprove ? '✅ ON — Free ads seedha live' : 'OFF — Free ads review me'}</button>
+                <button onClick={() => { const v = !sysAutoApprove; if (window.confirm(v ? "Free ads seedha LIVE honge. Continue?" : "Free ads phir se review me jayenge. Continue?")) { setSysAutoApprove(v); saveSystemSettings(sysCategories, sysFacilities, sysPricing, sysAdminPath, v); } }} className={`w-full py-3 rounded-xl font-black text-sm active:scale-95 transition-colors ${sysAutoApprove ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-500'}`}>{sysAutoApprove ? (<span className="inline-flex items-center gap-1"><Check size={14} strokeWidth={3} /> ON — Free ads seedha live</span>) : 'OFF — Free ads review me'}</button>
               </div>
              
              {/* UPI Card */}
@@ -336,7 +336,7 @@ export default function AdminPanel() {
                <h3 className="font-black text-brand mb-2 flex items-center gap-2"><Smartphone size={18}/> Admin UPI Details</h3>
                <p className="text-xs text-gray-500 mb-4 font-bold">Payments receive karne ke liye apni asli UPI ID daalein.</p>
                <input type="text" value={sysPricing.upiId || ''} onChange={e=>setSysPricing({...sysPricing, upiId: e.target.value})} placeholder="e.g. 9145891108@ybl" className="w-full p-3 bg-gray-50 rounded-xl outline-none font-bold text-sm border focus:border-brand mb-3" />
-               <button onClick={() => { if(window.confirm("💳 Kya aap sach mein UPI ID update karna chahte hain? Sabhi payments ab is naye UPI par aayengi.")) { saveSystemSettings(sysCategories, sysFacilities, sysPricing); } }} className="bg-brand text-white font-black py-3 px-4 rounded-xl text-sm w-full active:scale-95 transition-transform">Save UPI ID</button>
+               <button onClick={() => { if(window.confirm("Kya aap sach mein UPI ID update karna chahte hain? Sabhi payments ab is naye UPI par aayengi.")) { saveSystemSettings(sysCategories, sysFacilities, sysPricing); } }} className="bg-brand text-white font-black py-3 px-4 rounded-xl text-sm w-full active:scale-95 transition-transform">Save UPI ID</button>
              </div>
 
              {/* Security Card */}
@@ -353,10 +353,10 @@ export default function AdminPanel() {
 
               {/* Admin Path Card (backend-driven path) */}
               <div className="bg-white p-5 rounded-2xl shadow-sm border border-purple-100">
-                <h3 className="font-black text-purple-700 mb-2">🔗 Admin Panel Path</h3>
+                <h3 className="font-black text-purple-700 mb-2 flex items-center gap-1.5"><Link size={16} /> Admin Panel Path</h3>
                 <p className="text-xs text-gray-500 mb-4 font-bold">Ye path backend se aata hai. Save ke baad page refresh karo — tab naya path chalega, puraana band.</p>
                 <input type="text" value={sysAdminPath} onChange={e=>setSysAdminPath(e.target.value)} placeholder="/mera-secret-path" className="w-full p-3 bg-gray-50 rounded-xl outline-none font-bold text-sm border focus:border-purple-300 mb-3" />
-                <button onClick={() => { if(window.confirm("⚠️ Admin panel ka path badal jayega. Puraana path kaam nahi karega. Continue?")) { saveSystemSettings(sysCategories, sysFacilities, sysPricing, sysAdminPath); } }} className="bg-purple-600 text-white font-black py-3 px-4 rounded-xl text-sm w-full active:scale-95 transition-transform">Save Path</button>
+                <button onClick={() => { if(window.confirm("Admin panel ka path badal jayega. Puraana path kaam nahi karega. Continue?")) { saveSystemSettings(sysCategories, sysFacilities, sysPricing, sysAdminPath); } }} className="bg-purple-600 text-white font-black py-3 px-4 rounded-xl text-sm w-full active:scale-95 transition-transform">Save Path</button>
               </div>
 
              {/* Categories Card */}
@@ -451,7 +451,7 @@ export default function AdminPanel() {
                <div><label className="text-xs font-bold text-gray-500">15 Days Promo (₹)</label><input type="number" value={sysPricing.promo15} onChange={(e) => setSysPricing({...sysPricing, promo15: e.target.value})} className="w-full p-3 bg-gray-50 rounded-xl font-bold border mt-1 outline-none" /></div>
                 <div><label className="text-xs font-bold text-gray-500">30 Days Promo (₹)</label><input type="number" value={sysPricing.promo30} onChange={(e) => setSysPricing({...sysPricing, promo30: e.target.value})} className="w-full p-3 bg-gray-50 rounded-xl font-bold border mt-1 outline-none" /></div>
                 <div className="p-3 bg-purple-50 rounded-xl border border-purple-100">
-                  <label className="text-xs font-black text-purple-700 uppercase">🎯 Banner Add-on Price (₹)</label>
+                  <label className="text-xs font-black text-purple-700 uppercase flex items-center gap-1"><Megaphone size={12} /> Banner Add-on Price (₹)</label>
                   <input type="number" value={sysPricing.bannerPrice || ''} onChange={(e) => setSysPricing({...sysPricing, bannerPrice: e.target.value})} className="w-full p-2 bg-white rounded-lg font-bold border mt-1 outline-none" />
                 </div>
                 <div><label className="text-xs font-bold text-gray-500">Banner Duration (din)</label><input type="number" value={sysPricing.bannerDays || ''} onChange={(e) => setSysPricing({...sysPricing, bannerDays: e.target.value})} className="w-full p-3 bg-gray-50 rounded-xl font-bold border mt-1 outline-none" /></div>
