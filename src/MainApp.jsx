@@ -69,8 +69,8 @@ const SAT_STYLE = {
   layers: [{ id: 'esriSat', type: 'raster', source: 'esriSat' }]
 };
 
-// 💰 "₹5,500" → 5500 (filter/sort ke liye)
-const priceNum = (p) => Number(String(p || '').replace(/\D/g, '')) || 0;
+  // 💰 "₹5,500" → 5500 (filter/sort ke liye)
+  const priceNum = (p) => Number(String(p || '').replace(/\D/g, '')) || 0;
 
 // 📍 Haversine distance (meters) + format
 const distMeters = (lat1, lng1, lat2, lng2) => {
@@ -354,6 +354,21 @@ export default function MainApp() {
       if (data.success) { setForgotStep(null); setForgotEmail(''); setForgotOtp(''); setForgotNewPass(''); setForgotResetToken(''); }
     } catch { alert('Server connection failed.'); }
   };
+
+  // 💰 Dual-range slider logic (0–20000, ends = no limit)
+  const PRICE_CAP = 20000;
+  const priceLo = minPrice === '' ? 0 : Number(minPrice);
+  const priceHi = maxPrice === '' ? PRICE_CAP : Number(maxPrice);
+  const onMinSlide = (v) => {
+    const n = Number(v);
+    setMinPrice(n <= 0 ? '' : String(Math.min(n, priceHi)));
+  };
+  const onMaxSlide = (v) => {
+    const n = Number(v);
+    setMaxPrice(n >= PRICE_CAP ? '' : String(Math.max(n, priceLo)));
+  };
+  const inr = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
+  const THUMB = 'pointer-events-auto appearance-none w-5 h-5 rounded-full bg-white border-[3px] border-brand shadow cursor-pointer [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-[3px] [&::-webkit-slider-thumb]:border-brand [&::-webkit-slider-thumb]:shadow [&::-webkit-slider-thumb]:cursor-pointer [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:border-[3px] [&::-moz-range-thumb]:border-brand';
 
   const getAdAmount = () => {
     if (adType === 'regular') return sysSettings.pricing.regular;
@@ -813,9 +828,15 @@ export default function MainApp() {
           <button onClick={() => setFiltersOpen(!filtersOpen)} className="flex items-center gap-2 bg-gray-100 px-4 py-2 rounded-2xl text-xs font-black text-gray-600 active:scale-95"><Search size={14} /> Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}<span>{filtersOpen ? '▲' : '▼'}</span></button>
           {filtersOpen && (
             <div className="mt-2 bg-gray-50 border border-gray-200 rounded-2xl p-3 space-y-2">
-              <div className="flex gap-2">
-                <input type="number" value={minPrice} onChange={(e) => setMinPrice(e.target.value)} placeholder="Min ₹" className="flex-1 p-2.5 bg-white rounded-xl outline-none font-bold text-sm border" />
-                <input type="number" value={maxPrice} onChange={(e) => setMaxPrice(e.target.value)} placeholder="Max ₹" className="flex-1 p-2.5 bg-white rounded-xl outline-none font-bold text-sm border" />
+              <div className="px-1">
+                <div className="flex justify-between text-[11px] font-black mb-1"><span className="bg-brand/10 text-brand px-2 py-1 rounded-lg">{minPrice === '' ? 'Min' : inr(minPrice)}</span><span className="text-gray-400 font-bold self-center">ke beech</span><span className="bg-brand/10 text-brand px-2 py-1 rounded-lg">{maxPrice === '' ? 'Max' : inr(maxPrice)}</span></div>
+                <div className="relative h-7">
+                  <div className="absolute top-1/2 -translate-y-1/2 left-0 right-0 h-1.5 bg-gray-200 rounded-full" />
+                  <div className="absolute top-1/2 -translate-y-1/2 h-1.5 bg-brand rounded-full" style={{ left: `${(priceLo / PRICE_CAP) * 100}%`, right: `${100 - (priceHi / PRICE_CAP) * 100}%` }} />
+                  <input type="range" min="0" max={PRICE_CAP} step="500" value={priceLo} onChange={(e) => onMinSlide(e.target.value)} className={`absolute inset-x-0 top-1/2 -translate-y-1/2 w-full bg-transparent pointer-events-none appearance-none ${THUMB}`} aria-label="Minimum price" />
+                  <input type="range" min="0" max={PRICE_CAP} step="500" value={priceHi} onChange={(e) => onMaxSlide(e.target.value)} className={`absolute inset-x-0 top-1/2 -translate-y-1/2 w-full bg-transparent pointer-events-none appearance-none ${THUMB}`} aria-label="Maximum price" />
+                </div>
+                <p className="text-[10px] font-bold text-gray-400 text-center">Slide karo — in dono ke beech wale ads dikhenge</p>
               </div>
               <div className="flex gap-2">
                 <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="flex-1 p-2.5 bg-white rounded-xl outline-none font-bold text-sm border"><option value="new">Newest first</option><option value="lo">Price: Low to High</option><option value="hi">Price: High to Low</option></select>
@@ -906,7 +927,7 @@ export default function MainApp() {
         {selectedRoom && view === 'map' && !isPickingLocation && (
             <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-[92%] max-h-[42dvh] overflow-y-auto bg-white rounded-2xl shadow-2xl z-[100] p-3 border border-gray-100">
               <button onClick={closeRoomPopup} className="absolute top-2 right-2 w-8 h-8 bg-white shadow-lg rounded-full flex items-center justify-center text-gray-600 z-10"><X size={18}/></button>
-            <div className="flex gap-3 mb-2"><div className="flex gap-2 overflow-x-auto shrink-0 max-w-[45%] no-scrollbar">{roomGallery(selectedRoom).map((u, i) => (<img key={i} src={getImageUrl(u)} className="w-16 h-16 object-cover rounded-xl bg-gray-200 shrink-0 border border-gray-100" alt={`Room ${i + 1}`} />))}</div><div className="flex-1"><div className="flex justify-between items-start"><h3 className="font-black text-gray-800 line-clamp-1">{selectedRoom.title}</h3><span className="bg-brand/10 text-brand px-2 py-1 rounded-lg text-[10px] font-black shrink-0 ml-1">{selectedRoom.category}</span></div><p className="text-brand font-black text-xl leading-none mt-1">{selectedRoom.price}</p><p className="text-[11px] font-bold text-gray-500 mt-1.5 flex items-center gap-1"><User size={12}/> {selectedRoom.ownerName || 'Owner'} <span className="mx-1">•</span> <Phone size={12}/> {selectedRoom.mobile}</p></div></div>
+            <div className="flex gap-3 mb-2"><div className="flex gap-2 overflow-x-auto shrink-0 max-w-[45%] no-scrollbar">{roomGallery(selectedRoom).map((u, i) => (<img key={i} src={getImageUrl(u)} className="w-16 h-16 object-cover rounded-xl bg-gray-200 shrink-0 border border-gray-100" alt={`Room ${i + 1}`} />))}</div><div className="flex-1"><div className="flex justify-between items-start pr-10"><h3 className="font-black text-gray-800 line-clamp-1">{selectedRoom.title}</h3><span className="bg-brand/10 text-brand px-2 py-1 rounded-lg text-[10px] font-black shrink-0 ml-1">{selectedRoom.category}</span></div><p className="text-brand font-black text-xl leading-none mt-1">{selectedRoom.price}</p><p className="text-[11px] font-bold text-gray-500 mt-1.5 flex items-center gap-1"><User size={12}/> {selectedRoom.ownerName || 'Owner'} <span className="mx-1">•</span> <Phone size={12}/> {selectedRoom.mobile}</p></div></div>
             {selectedRoom.description && (<div className="flex gap-1.5 mb-2 pt-2 border-t border-gray-50 overflow-x-auto no-scrollbar flex-nowrap">{selectedRoom.description.split(', ').map(fac => (<span key={fac} className="bg-gray-50 text-gray-600 border px-2 py-1 rounded-md text-[9px] font-bold uppercase shrink-0">{fac}</span>))}</div>)}
             {Array.isArray(selectedRoom.landmarks) && selectedRoom.landmarks.length > 0 && (<div className="bg-purple-50 border border-purple-100 rounded-xl p-2 mb-2"><p className="text-[10px] font-black text-purple-700 uppercase mb-1 flex items-center gap-1"><MapPin size={12} /> Aas-paas ki jagah</p>{selectedRoom.landmarks.map((l, i) => (<p key={i} className="text-[11px] font-bold text-gray-700 flex items-center gap-1"><PoiIcon cat={l.cat} size={12} /><span>{l.name} — <span className="text-purple-700">{fmtDist(l.distM)}</span></span></p>))}</div>)}
             <div className="flex gap-2 items-center mb-3">
