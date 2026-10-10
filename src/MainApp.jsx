@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as maplibregl from 'maplibre-gl'; // v6 ESM-only: namespace import (default import hata)
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { X, Phone, MessageCircle, Map as MapIcon, List, Plus, Camera, Target, Info, FileText, Shield, ChevronRight, Menu, User, MapPin, Lock, Search, Navigation, AlertTriangle, Heart, Share2, Megaphone, Landmark, TrainFront, Bus, Hospital, Stethoscope, GraduationCap, School, BookOpen, Star, Satellite, Ruler, Send, Copy, Home, Users, Building2, Briefcase, Hotel, Check, Tag } from 'lucide-react';
+import { X, Phone, MessageCircle, Map as MapIcon, List, Plus, Camera, Target, Info, FileText, Shield, ChevronRight, Menu, User, MapPin, Lock, Search, Navigation, AlertTriangle, Heart, Share2, Megaphone, Landmark, TrainFront, Bus, Hospital, Stethoscope, GraduationCap, School, BookOpen, Star, Satellite, Ruler, Send, Copy, Home, Users, Building2, Briefcase, Hotel, Check, Tag, Image as ImageIcon } from 'lucide-react';
 import { GoogleLogin } from '@react-oauth/google';
 
 const VITE_API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
@@ -607,6 +607,145 @@ export default function MainApp() {
     } else copyShareLink(room);
   };
 
+  // 🖼️ Visiting-card IMAGE banao (canvas) — WhatsApp par waisa-ka-waisa card jayega
+  const loadCardPhoto = (url) => new Promise((resolve) => {
+    if (!url) return resolve(null);
+    const img = new window.Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = url;
+  });
+
+  const wrapCardText = (ctx, text, x, y, maxW, lh, maxLines) => {
+    const words = String(text || '').split(' ').filter(Boolean);
+    let line = '';
+    let yy = y;
+    let lines = 0;
+    for (const w of words) {
+      const t = line ? `${line} ${w}` : w;
+      if (ctx.measureText(t).width > maxW && line && lines + 1 < maxLines) {
+        ctx.fillText(line, x, yy);
+        line = w; yy += lh; lines += 1;
+      } else if (ctx.measureText(t).width > maxW && line) {
+        ctx.fillText(`${line}…`, x, yy);
+        return yy;
+      } else line = t;
+    }
+    if (line) ctx.fillText(line, x, yy);
+    return yy;
+  };
+
+  const drawShareCard = async (room) => {
+    const W = 900;
+    const H = 1260;
+    const canvas = document.createElement('canvas');
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext('2d');
+    // Background
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, W, H);
+    // Photo (cover crop) ya brand placeholder
+    const photoUrl = roomGallery(room)[0];
+    const photo = await loadCardPhoto(photoUrl ? getImageUrl(photoUrl) : null);
+    if (photo) {
+      const scale = Math.max(900 / photo.width, 560 / photo.height);
+      const dw = photo.width * scale;
+      const dh = photo.height * scale;
+      ctx.drawImage(photo, (900 - dw) / 2, (560 - dh) / 2, dw, dh);
+    } else {
+      ctx.fillStyle = '#0d9488';
+      ctx.fillRect(0, 0, 900, 560);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '900 72px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('RoomKhojo', 450, 300);
+    }
+    // Price pill
+    ctx.fillStyle = 'rgba(0,0,0,0.72)';
+    ctx.beginPath();
+    ctx.roundRect(36, 456, 300, 72, 36);
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '900 44px system-ui, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(String(room.price || ''), 66, 506);
+    if (room.isPromoted) {
+      ctx.fillStyle = '#f97316';
+      ctx.beginPath();
+      ctx.roundRect(36, 36, 250, 64, 32);
+      ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '900 34px system-ui, sans-serif';
+      ctx.fillText('FEATURED', 62, 80);
+    }
+    // Details
+    let y = 660;
+    ctx.fillStyle = '#111827';
+    ctx.font = '900 46px system-ui, sans-serif';
+    y = wrapCardText(ctx, room.title, 40, y, 820, 56, 2) + 44;
+    ctx.fillStyle = '#6b7280';
+    ctx.font = '700 30px system-ui, sans-serif';
+    ctx.fillText(`${room.category || ''} • ${room.type || ''}`, 40, y);
+    y += 48;
+    ctx.fillText(`Landmark: ${room.landmark || 'Hanumangarh'}`, 40, y);
+    y += 48;
+    ctx.fillStyle = '#111827';
+    ctx.fillText(`${room.ownerName || 'Owner'} • ${room.mobile || ''}`, 40, y);
+    y += 52;
+    if (room.description) {
+      ctx.fillStyle = '#4b5563';
+      ctx.font = '700 27px system-ui, sans-serif';
+      const facs = String(room.description).split(', ').slice(0, 6).join(' • ');
+      y = wrapCardText(ctx, facs, 40, y, 820, 38, 2) + 44;
+    }
+    if (Array.isArray(room.landmarks) && room.landmarks.length > 0) {
+      ctx.fillStyle = '#7c3aed';
+      ctx.font = '700 27px system-ui, sans-serif';
+      room.landmarks.slice(0, 2).forEach((l) => {
+        ctx.fillText(`${l.name || ''} (${fmtDist(l.distM)})`, 40, y);
+        y += 38;
+      });
+      y += 10;
+    }
+    // Link + footer
+    ctx.strokeStyle = '#e5e7eb';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(40, y); ctx.lineTo(860, y);
+    ctx.stroke();
+    y += 46;
+    ctx.fillStyle = '#0d9488';
+    ctx.font = '900 32px system-ui, sans-serif';
+    ctx.fillText('roomkhojoo.vercel.app', 40, y);
+    ctx.fillStyle = '#0d9488';
+    ctx.fillRect(0, H - 110, W, 110);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '900 44px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('RoomKhojo', 450, H - 40);
+    return new Promise((resolve, reject) => {
+      canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('blob fail'))), 'image/png');
+    });
+  };
+
+  // Card image ko native share-sheet se bhejo (WhatsApp = photo + caption)
+  const shareCardImage = async (room) => {
+    try {
+      const blob = await drawShareCard(room);
+      const file = new File([blob], 'roomkhojo-ad.png', { type: 'image/png' });
+      const caption = `${room.title} — ${room.price}\n${shareUrl(room)}`;
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: room.title, text: caption });
+        return;
+      }
+      throw new Error('file-share unsupported');
+    } catch (err) {
+      if (err && err.name === 'AbortError') return; // user ne cancel kiya
+      copyShareLink(room); // fallback: text+link
+    }
+  };
+
   // Popup band karo + shared-link param saaf karo
   const closeRoomPopup = () => {
     setSelectedRoom(null);
@@ -848,6 +987,9 @@ export default function MainApp() {
                 <button onClick={() => copyShareLink(shareRoom)} className="text-[10px] font-black bg-blue-600 text-white px-2 py-1.5 rounded-lg shrink-0 active:scale-95 inline-flex items-center gap-1"><Copy size={12} /> Copy</button>
               </div>
               <div className="flex gap-2 mt-3">
+                <button onClick={() => shareCardImage(shareRoom)} className="flex-1 bg-purple-600 text-white py-3 rounded-2xl font-black text-sm flex items-center justify-center gap-2 active:scale-95 shadow-lg shadow-purple-600/30"><ImageIcon size={18} /> Card Share</button>
+              </div>
+              <div className="flex gap-2 mt-2">
                 <button onClick={() => shareWhatsApp(shareRoom)} className="flex-1 bg-[#25D366] text-white py-3 rounded-2xl font-black text-sm flex items-center justify-center gap-2 active:scale-95"><MessageCircle size={18}/> WhatsApp</button>
                 <button onClick={() => nativeShare(shareRoom)} className="flex-1 bg-slate-900 text-white py-3 rounded-2xl font-black text-sm active:scale-95 inline-flex items-center justify-center gap-2"><Share2 size={16} /> More</button>
               </div>
