@@ -324,7 +324,7 @@ export default function UserDashboard() {
             </div>
             <a href={`upi://pay?pa=${renewUpiId}&pn=RoomKhojo&am=${renewPrice(renewPlan)}&cu=INR&tn=Renew: ${renewRoom.paymentCode}`} className="w-full bg-brand text-white py-4 rounded-2xl font-black text-sm flex items-center justify-center gap-2 mb-3 shadow-lg active:scale-95">Pay ₹{renewPrice(renewPlan)} via UPI App</a>
             <input type="text" value={renewRef} onChange={(e) => setRenewRef(e.target.value)} placeholder="UPI Ref / UTR No. (payment ke baad milta hai)" className="w-full p-3 bg-gray-50 rounded-xl outline-none font-bold text-sm border mb-3" />
-            <button onClick={submitRenew} disabled={isSubmitting} className="w-full bg-green-600 text-white py-4 rounded-2xl font-black active:scale-95">{isSubmitting ? 'Bhej rahe hain...' : '✅ I have paid — Send for Verification'}</button>
+            <button onClick={submitRenew} disabled={isSubmitting} className="w-full bg-green-600 text-white py-4 rounded-2xl font-black active:scale-95">{isSubmitting ? 'Bhej rahe hain...' : 'I have paid — Send for Verification'}</button>
           </div>
         </div>
       )}
