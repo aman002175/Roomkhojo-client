@@ -15,9 +15,14 @@ const authHeaders = () => {
 export default function UserDashboard() {
   const navigate = useNavigate();
   // Session lazy-load (refresh par login bana rehta hai)
-  const [currentUser] = useState(() => {
+  const [currentUser, setCurrentUser] = useState(() => {
     try { const saved = localStorage.getItem('roomkhojo_user'); return saved ? JSON.parse(saved) : null; } catch { return null; }
   });
+  // ⚙️ Settings panel states
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [oldPw, setOldPw] = useState('');
+  const [newPw, setNewPw] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
   const [myRooms, setMyRooms] = useState([]);
 
@@ -149,6 +154,39 @@ export default function UserDashboard() {
     setIsSubmitting(false);
   };
 
+  // ⚙️ Settings: naam + password save
+  const saveProfileName = async () => {
+    if (!editName.trim()) return alert('Naam khaali nahi ho sakta.');
+    try {
+      const res = await fetch(`${BASE_URL}/api/users/profile`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({ name: editName.trim() })
+      });
+      const data = await res.json();
+      alert(data.message);
+      if (data.success) {
+        const merged = { ...currentUser, ...data.user };
+        setCurrentUser(merged);
+        localStorage.setItem('roomkhojo_user', JSON.stringify(merged));
+      }
+    } catch { alert('Server connection failed.'); }
+  };
+
+  const saveNewPassword = async () => {
+    if (!oldPw || !newPw) return alert('Puraana aur naya password dono daliye.');
+    try {
+      const res = await fetch(`${BASE_URL}/api/users/change-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({ oldPassword: oldPw, newPassword: newPw })
+      });
+      const data = await res.json();
+      alert(data.message);
+      if (data.success) { setOldPw(''); setNewPw(''); }
+    } catch { alert('Server connection failed.'); }
+  };
+
   const getDaysLeft = (expiryDate, plan) => {
     if (plan === 'regular' || !plan) return null;
     if (!expiryDate) return null;
@@ -159,7 +197,7 @@ export default function UserDashboard() {
     <div className="h-[100dvh] w-full bg-gray-50 flex flex-col font-sans">
       <header className="bg-brand text-white p-6 rounded-b-[40px] shadow-lg relative shrink-0">
         <button onClick={() => navigate('/')} className="absolute top-6 left-6 p-2 bg-white/20 rounded-full active:scale-95 transition-transform"><ArrowLeft size={20}/></button>
-        <button className="absolute top-6 right-6 p-2 bg-white/20 rounded-full active:scale-95 transition-transform"><Settings size={20}/></button>
+        <button onClick={() => { setEditName(currentUser?.name || ''); setOldPw(''); setNewPw(''); setSettingsOpen(true); }} className="absolute top-6 right-6 p-2 bg-white/20 rounded-full active:scale-95 transition-transform"><Settings size={20}/></button>
         <div className="flex flex-col items-center mt-6">
           {currentUser?.pic ? ( <img src={currentUser.pic} alt="Profile" className="w-24 h-24 rounded-full border-4 border-white shadow-xl mb-4 object-cover" /> ) : ( <div className="w-24 h-24 bg-white/20 rounded-full flex items-center justify-center border-4 border-white shadow-xl mb-4"><User size={40}/></div> )}
           <h1 className="text-2xl font-black">Welcome, {currentUser?.name?.split(' ')[0] || 'User'}</h1>
@@ -223,6 +261,9 @@ export default function UserDashboard() {
                                 <span className={`text-[10px] font-black px-2 py-1 rounded-lg ${room.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
                                   {room.isActive ? '🟢 Active' : '🔴 Inactive'}
                                 </span>
+                                <span className="text-[10px] font-black px-2 py-1 rounded-lg bg-blue-50 text-blue-700">
+                                  👁 {room.views || 0}
+                                </span>
                                 {daysLeft !== null && daysLeft > 3 && (
                                   <span className="text-[10px] font-bold text-gray-500">{daysLeft} Days Left</span>
                                 )}
@@ -247,9 +288,7 @@ export default function UserDashboard() {
         )}
       </div>
 
-      <div className="p-6 bg-white border-t shrink-0">
-        <button onClick={handleLogout} className="w-full bg-red-50 text-red-600 py-4 rounded-2xl font-black text-lg flex items-center justify-center gap-2 active:scale-95 transition-transform"><LogOut size={20}/> Logout</button>
-      </div>
+      {/* Logout ab Settings panel me hai (upar gear button) */}
 
       {/* 🔄 RENEW MODAL (expired promo → payment → admin verify) */}
       {renewRoom && (
@@ -266,6 +305,36 @@ export default function UserDashboard() {
             <a href={`upi://pay?pa=${renewUpiId}&pn=RoomKhojo&am=${renewPrice(renewPlan)}&cu=INR&tn=Renew: ${renewRoom.paymentCode}`} className="w-full bg-brand text-white py-4 rounded-2xl font-black text-sm flex items-center justify-center gap-2 mb-3 shadow-lg active:scale-95">Pay ₹{renewPrice(renewPlan)} via UPI App</a>
             <input type="text" value={renewRef} onChange={(e) => setRenewRef(e.target.value)} placeholder="UPI Ref / UTR No. (payment ke baad milta hai)" className="w-full p-3 bg-gray-50 rounded-xl outline-none font-bold text-sm border mb-3" />
             <button onClick={submitRenew} disabled={isSubmitting} className="w-full bg-green-600 text-white py-4 rounded-2xl font-black active:scale-95">{isSubmitting ? 'Bhej rahe hain...' : '✅ I have paid — Send for Verification'}</button>
+          </div>
+        </div>
+      )}
+
+      {/* ⚙️ SETTINGS PANEL (profile + password + logout) */}
+      {settingsOpen && (
+        <div className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4">
+          <div className="bg-white w-full max-w-md rounded-t-[30px] sm:rounded-3xl flex flex-col max-h-[85dvh] shadow-2xl relative">
+            <div className="p-5 border-b shrink-0 flex justify-between items-center sticky top-0 bg-white rounded-t-[30px] sm:rounded-t-3xl z-10">
+              <h2 className="text-xl font-black">⚙️ Settings</h2>
+              <button onClick={() => setSettingsOpen(false)} className="bg-gray-100 p-2 rounded-full active:scale-90"><X size={20}/></button>
+            </div>
+            <div className="p-5 overflow-y-auto space-y-5 flex-1">
+              <div className="flex items-center gap-3 bg-gray-50 p-4 rounded-2xl border">
+                {currentUser?.pic ? (<img src={currentUser.pic} alt="Profile" className="w-14 h-14 rounded-full object-cover border-2 border-white shadow shrink-0" />) : (<div className="w-14 h-14 bg-brand/10 rounded-full flex items-center justify-center text-brand shrink-0"><User size={28}/></div>)}
+                <div className="min-w-0"><p className="font-black text-gray-800 truncate">{currentUser?.name || 'User'}</p><p className="text-xs font-bold text-gray-500 truncate">{currentUser?.email || ''}</p></div>
+              </div>
+              <div>
+                <p className="text-xs font-black text-gray-500 mb-2 uppercase">Display Name</p>
+                <div className="flex gap-2"><input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="Apna naam" className="flex-1 p-3 bg-gray-50 rounded-xl outline-none font-bold text-sm border" /><button onClick={saveProfileName} className="bg-slate-900 text-white px-4 rounded-xl font-black text-sm active:scale-95">Save</button></div>
+              </div>
+              <div>
+                <p className="text-xs font-black text-gray-500 mb-2 uppercase">Password Badlo</p>
+                <div className="space-y-2"><input type="password" value={oldPw} onChange={(e) => setOldPw(e.target.value)} placeholder="Puraana password" className="w-full p-3 bg-gray-50 rounded-xl outline-none font-bold text-sm border" /><input type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)} placeholder="Naya password (min 6)" className="w-full p-3 bg-gray-50 rounded-xl outline-none font-bold text-sm border" /><button onClick={saveNewPassword} className="w-full bg-blue-600 text-white py-3 rounded-xl font-black text-sm active:scale-95">Update Password</button></div>
+                <p className="text-[11px] font-bold text-gray-400 mt-2">Google se login karte ho? Toh password hai hi nahi — seedha logout/login karo.</p>
+              </div>
+            </div>
+            <div className="p-4 border-t bg-white sticky bottom-0 z-10 shrink-0">
+              <button onClick={handleLogout} className="w-full bg-red-50 text-red-600 py-4 rounded-2xl font-black text-lg flex items-center justify-center gap-2 active:scale-95"><LogOut size={20}/> Logout</button>
+            </div>
           </div>
         </div>
       )}
