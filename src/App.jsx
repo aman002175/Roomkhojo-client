@@ -7,6 +7,7 @@ const MainApp = lazy(() => import('./MainApp'));
 const AdminPanel = lazy(() => import('./AdminPanel'));
 const UserDashboard = lazy(() => import('./UserDashboard'));
 const LegalPage = lazy(() => import('./LegalPage'));
+const Support = lazy(() => import('./Support'));
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://roomkhojo-api.onrender.com';
 const DEFAULT_ADMIN_PATH = '/admin-secret-29';
@@ -54,6 +55,7 @@ export default function App() {
             <Route path="/" element={<MainApp />} />
             <Route path={adminPath} element={<AdminPanel />} />
             <Route path="/dashboard" element={<UserDashboard />} />
+            <Route path="/support" element={<Support />} />
 
             {/* ── Legal Pages ── */}
             <Route path="/about" element={<LegalPage type="about" />} />

@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { User, LogOut, LayoutDashboard, Check, X, Settings, Lock, ShieldAlert, Save, Plus, BarChart3, Clock, MessageCircle, Smartphone, AlertTriangle, MapPin, Star, Megaphone, Link, Crown } from 'lucide-react';
+import { User, LogOut, LayoutDashboard, Check, X, Settings, Lock, ShieldAlert, Save, Plus, BarChart3, Clock, MessageCircle, Smartphone, AlertTriangle, MapPin, Star, Megaphone, Link, Crown, Send } from 'lucide-react';
 
 const VITE_API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const BASE_URL = VITE_API_BASE_URL ? VITE_API_BASE_URL.replace('/api', '') : 'https://roomkhojo-api.onrender.com';
 const API_URL = `${BASE_URL}/api/rooms`;
 const ADMIN_API = `${BASE_URL}/api/admin`;
+const SUPPORT_API = `${BASE_URL}/api/support`;
 const getImageUrl = (path) => !path ? 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=400&q=80' : path.startsWith('http') ? path : `${BASE_URL}${path}`;
 
 // Admin JWT (sessionStorage me) — hardcoded 'x-admin-secret' hata diya (C5 fix)
@@ -38,6 +39,11 @@ export default function AdminPanel() {
   const [sysAdminPath, setSysAdminPath] = useState('/admin-secret-29');
 
   const [refreshKey, setRefreshKey] = useState(0);
+  // 🎧 Support tickets
+  const [tickets, setTickets] = useState([]);
+  const [openCount, setOpenCount] = useState(0);
+  const [openTicketId, setOpenTicketId] = useState(null);
+  const [adminReply, setAdminReply] = useState({});
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -57,6 +63,10 @@ export default function AdminPanel() {
         }
       })
       .catch(() => { /* settings load fail: silent */ });
+    fetch(`${SUPPORT_API}/admin/all`, { headers: adminAuthHeaders() })
+      .then(res => res.json())
+      .then(data => { if (data.success) { setTickets(data.tickets || []); setOpenCount(data.openCount || 0); } })
+      .catch(() => { /* tickets load fail: silent */ });
   }, [isAuthenticated, refreshKey]);
 
   const handleLogin = async () => {
@@ -80,6 +90,27 @@ export default function AdminPanel() {
       const data = await res.json(); alert(data.message);
       if(data.success) { setOldPass(''); setNewAdminUser(''); setNewAdminPass(''); if(newAdminPass) { sessionStorage.removeItem('roomkhojo_admin_token'); setIsAuthenticated(false); } }
     } catch { alert("Error."); }
+  };
+
+  // 🎧 Support: jawab + close/reopen
+  const sendAdminReply = async (ticketId) => {
+    const text = (adminReply[ticketId] || '').trim();
+    if (!text) return alert('Jawab likho pehle.');
+    try {
+      const res = await fetch(`${SUPPORT_API}/${ticketId}/reply`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...adminAuthHeaders() }, body: JSON.stringify({ text }) });
+      const data = await res.json();
+      if (data.success) { setAdminReply(prev => ({ ...prev, [ticketId]: '' })); setRefreshKey(k => k + 1); }
+      else alert(data.message);
+    } catch { alert('Server connection failed.'); }
+  };
+
+  const setTicketStatus = async (ticketId, status) => {
+    try {
+      const res = await fetch(`${SUPPORT_API}/admin/${ticketId}/status`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', ...adminAuthHeaders() }, body: JSON.stringify({ status }) });
+      const data = await res.json();
+      if (data.success) setRefreshKey(k => k + 1);
+      else alert(data.message);
+    } catch { alert('Server connection failed.'); }
   };
 
   // 🚨 SMART ERROR TRACKER (Ise Update Kiya Hai)
@@ -209,6 +240,7 @@ export default function AdminPanel() {
         <button onClick={() => setActiveTab('pending')} className={`flex shrink-0 items-center gap-2 px-4 py-2 rounded-full text-sm font-bold ${activeTab === 'pending' ? 'bg-orange-100 text-orange-700' : 'bg-gray-50 text-gray-600'}`}><LayoutDashboard size={16} className="shrink-0"/> Pending ({pendingAds.length})</button>
         <button onClick={() => setActiveTab('live')} className={`flex shrink-0 items-center gap-2 px-4 py-2 rounded-full text-sm font-bold ${activeTab === 'live' ? 'bg-green-100 text-green-700' : 'bg-gray-50 text-gray-600'}`}><Check size={16} className="shrink-0"/> Live ({liveAds.length})</button>
         <button onClick={() => setActiveTab('system')} className={`flex shrink-0 items-center gap-2 px-4 py-2 rounded-full text-sm font-bold ${activeTab === 'system' ? 'bg-purple-100 text-purple-700' : 'bg-gray-50 text-gray-600'}`}><Settings size={16} className="shrink-0"/> System</button>
+        <button onClick={() => setActiveTab('support')} className={`flex shrink-0 items-center gap-2 px-4 py-2 rounded-full text-sm font-bold ${activeTab === 'support' ? 'bg-teal-100 text-teal-700' : 'bg-gray-50 text-gray-600'}`}><MessageCircle size={16} className="shrink-0"/> Support{openCount > 0 ? ` (${openCount})` : ''}</button>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -309,6 +341,50 @@ export default function AdminPanel() {
               </div>
             )})
           )
+        )}
+
+        {/* Support Tab */}
+        {activeTab === 'support' && (
+          <div className="space-y-4 pb-10">
+            <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex justify-between items-center">
+              <p className="font-black text-gray-800">Support Tickets</p>
+              <span className="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-xs font-black">{openCount} Khule</span>
+            </div>
+            {tickets.length === 0 ? (
+              <p className="text-center text-gray-500 font-bold p-10">Koi ticket nahi hai.</p>
+            ) : tickets.map(t => (
+              <div key={t._id} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-200">
+                <div className="flex justify-between items-start gap-2 mb-2">
+                  <div>
+                    <span className={`text-[10px] font-black px-2 py-1 rounded-lg uppercase ${t.status === 'open' ? 'bg-orange-100 text-orange-700' : t.status === 'replied' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>{t.status}</span>
+                    <p className="text-xs font-black text-gray-700 mt-1">{t.category} • {t.userName || t.userEmail || 'User'}</p>
+                  </div>
+                  <button onClick={() => setOpenTicketId(openTicketId === t._id ? null : t._id)} className="text-xs font-black text-brand underline shrink-0">{openTicketId === t._id ? 'Band karo' : 'Kholo'}</button>
+                </div>
+                <p className="text-sm font-bold text-gray-700">{t.message}</p>
+                {t.image && <img src={getImageUrl(t.image)} className="w-32 h-24 rounded-xl object-cover border border-gray-200 mt-2" alt="Proof" />}
+                {openTicketId === t._id && (
+                  <div className="mt-3 pt-3 border-t space-y-2">
+                    {(t.replies || []).map((r, i) => (
+                      <div key={i} className={`p-2.5 rounded-xl text-xs font-bold max-w-[90%] ${r.by === 'admin' ? 'bg-blue-50 text-blue-900 border border-blue-100 ml-auto' : 'bg-gray-100 text-gray-700'}`}>
+                        <p className="text-[10px] uppercase opacity-60 mb-0.5">{r.by === 'admin' ? 'Aap (Admin)' : (t.userName || 'User')}</p>
+                        {r.text}
+                      </div>
+                    ))}
+                    <div className="flex gap-2">
+                      <input type="text" value={adminReply[t._id] || ''} onChange={(e) => setAdminReply(prev => ({ ...prev, [t._id]: e.target.value }))} placeholder="Jawab likho…" className="flex-1 p-2.5 bg-gray-50 rounded-xl outline-none font-bold text-sm border" />
+                      <button onClick={() => sendAdminReply(t._id)} className="bg-brand text-white px-4 rounded-xl active:scale-95"><Send size={16} /></button>
+                    </div>
+                    <div className="flex gap-2">
+                      {t.status !== 'closed'
+                        ? <button onClick={() => setTicketStatus(t._id, 'closed')} className="flex-1 bg-gray-100 text-gray-600 py-2.5 rounded-xl font-black text-xs active:scale-95">Close Ticket</button>
+                        : <button onClick={() => setTicketStatus(t._id, 'open')} className="flex-1 bg-orange-50 text-orange-700 py-2.5 rounded-xl font-black text-xs active:scale-95">Dobara Kholo</button>}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
         )}
 
         {/* System Tab */}
