@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { User, LogOut, LayoutDashboard, Check, X, Settings, Lock, ShieldAlert, Save, Plus, BarChart3, Clock, MessageCircle, Smartphone, AlertTriangle, MapPin, Star, Megaphone, Link, Crown, Send } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { User, LogOut, LayoutDashboard, Check, X, Settings, Lock, ShieldAlert, Save, Plus, BarChart3, Clock, MessageCircle, Smartphone, AlertTriangle, MapPin, Star, Megaphone, Link, Crown, Send, ArrowLeft } from 'lucide-react';
 
 const VITE_API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const BASE_URL = VITE_API_BASE_URL ? VITE_API_BASE_URL.replace('/api', '') : 'https://roomkhojo-api.onrender.com';
@@ -42,8 +42,13 @@ export default function AdminPanel() {
   // 🎧 Support tickets
   const [tickets, setTickets] = useState([]);
   const [openCount, setOpenCount] = useState(0);
-  const [openTicketId, setOpenTicketId] = useState(null);
+  const [chatTicketId, setChatTicketId] = useState(null);
   const [adminReply, setAdminReply] = useState({});
+  const adminChatScrollRef = useRef(null);
+
+  useEffect(() => {
+    if (adminChatScrollRef.current) adminChatScrollRef.current.scrollTop = adminChatScrollRef.current.scrollHeight;
+  }, [chatTicketId, tickets]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -194,6 +199,8 @@ export default function AdminPanel() {
     return diff > 0 ? <span className="text-green-600 font-bold">{diff} Days</span> : <span className="text-red-500 font-bold">Expired</span>;
   };
 
+  const chatTicket = chatTicketId ? tickets.find(x => x._id === chatTicketId) || null : null;
+
   if (!isAuthenticated) {
     return (
       <div className="h-[100dvh] w-full bg-slate-900 flex items-center justify-center p-6 font-sans">
@@ -235,12 +242,11 @@ export default function AdminPanel() {
       </header>
       
       {/* Tabs */}
-      <div className="order-2 flex px-4 py-3 gap-2 overflow-x-auto no-scrollbar bg-white shadow-[0_-4px_12px_rgba(0,0,0,0.06)] border-t shrink-0">
-        <button onClick={() => setActiveTab('analytics')} className={`flex shrink-0 items-center gap-2 px-4 py-2 rounded-full text-sm font-bold ${activeTab === 'analytics' ? 'bg-blue-100 text-blue-700' : 'bg-gray-50 text-gray-600'}`}><BarChart3 size={16} className="shrink-0"/> Analytics</button>
-        <button onClick={() => setActiveTab('pending')} className={`flex shrink-0 items-center gap-2 px-4 py-2 rounded-full text-sm font-bold ${activeTab === 'pending' ? 'bg-orange-100 text-orange-700' : 'bg-gray-50 text-gray-600'}`}><LayoutDashboard size={16} className="shrink-0"/> Pending ({pendingAds.length})</button>
-        <button onClick={() => setActiveTab('live')} className={`flex shrink-0 items-center gap-2 px-4 py-2 rounded-full text-sm font-bold ${activeTab === 'live' ? 'bg-green-100 text-green-700' : 'bg-gray-50 text-gray-600'}`}><Check size={16} className="shrink-0"/> Live ({liveAds.length})</button>
-        <button onClick={() => setActiveTab('system')} className={`flex shrink-0 items-center gap-2 px-4 py-2 rounded-full text-sm font-bold ${activeTab === 'system' ? 'bg-purple-100 text-purple-700' : 'bg-gray-50 text-gray-600'}`}><Settings size={16} className="shrink-0"/> System</button>
-        <button onClick={() => setActiveTab('support')} className={`flex shrink-0 items-center gap-2 px-4 py-2 rounded-full text-sm font-bold ${activeTab === 'support' ? 'bg-teal-100 text-teal-700' : 'bg-gray-50 text-gray-600'}`}><MessageCircle size={16} className="shrink-0"/> Support{openCount > 0 ? ` (${openCount})` : ''}</button>
+      <div className="order-2 bg-white border-t shrink-0 px-2 pt-2 grid grid-cols-4 gap-1" style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}>
+        <button onClick={() => setActiveTab('analytics')} className={`flex flex-col items-center gap-1 py-1 transition-all ${activeTab === 'analytics' ? 'text-brand scale-105' : 'text-gray-400'}`}><BarChart3 size={22} /><span className="text-[10px] font-black uppercase tracking-tighter">Analytics</span></button>
+        <button onClick={() => setActiveTab('ads')} className={`flex flex-col items-center gap-1 py-1 transition-all relative ${activeTab === 'ads' ? 'text-brand scale-105' : 'text-gray-400'}`}><LayoutDashboard size={22} />{pendingAds.length > 0 && (<span className="absolute top-0 right-3 bg-orange-500 text-white text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center">{pendingAds.length}</span>)}<span className="text-[10px] font-black uppercase tracking-tighter">Ads</span></button>
+        <button onClick={() => setActiveTab('support')} className={`flex flex-col items-center gap-1 py-1 transition-all relative ${activeTab === 'support' ? 'text-brand scale-105' : 'text-gray-400'}`}><MessageCircle size={22} />{openCount > 0 && (<span className="absolute top-0 right-3 bg-red-500 text-white text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center">{openCount}</span>)}<span className="text-[10px] font-black uppercase tracking-tighter">Support</span></button>
+        <button onClick={() => setActiveTab('system')} className={`flex flex-col items-center gap-1 py-1 transition-all ${activeTab === 'system' ? 'text-brand scale-105' : 'text-gray-400'}`}><Settings size={22} /><span className="text-[10px] font-black uppercase tracking-tighter">System</span></button>
       </div>
 
       <div className="order-1 flex-1 overflow-y-auto p-4 space-y-4">
@@ -253,9 +259,10 @@ export default function AdminPanel() {
           </div>
         )}
 
-        {/* Pending Tab */}
-        {activeTab === 'pending' && (
-          pendingAds.length === 0 ? (
+        {/* Ads Tab — Section 1: Pending */}
+        {activeTab === 'ads' && (<div className="space-y-4 pb-10">
+          <h2 className="text-base font-black text-gray-800 px-1 flex items-center gap-2"><LayoutDashboard size={18} className="text-orange-500" /> Pending Approval ({pendingAds.length})</h2>
+          {pendingAds.length === 0 ? (
             <p className="text-center text-gray-500 font-bold p-10">Koi pending ad nahi hai.</p>
           ) : (
             pendingAds.map(room => (
@@ -297,12 +304,15 @@ export default function AdminPanel() {
                 </div>
               </div>
             ))
-          )
+          )}
+          </div>
         )}
-        
-        {/* Live Tab */}
-        {activeTab === 'live' && (
-          liveAds.length === 0 ? (
+
+          {/* Ads Tab — Section 2: Live */}
+        {activeTab === 'ads' && (<div className="space-y-4 pb-10">
+          {/* Ads Tab — Section 2: Live */}
+          <h2 className="text-base font-black text-gray-800 px-1 pt-3 flex items-center gap-2"><Check size={18} className="text-green-600" /> Live Ads ({liveAds.length})</h2>
+          {liveAds.length === 0 ? (
             <p className="text-center text-gray-500 font-bold p-10">Koi live ad nahi hai.</p>
           ) : (
             liveAds.map(room => {
@@ -340,8 +350,42 @@ export default function AdminPanel() {
                 </div>
               </div>
             )})
-          )
+          )}
+          </div>
         )}
+
+      {/* 💬 ADMIN CHAT OVERLAY (full-screen) */}
+      {chatTicket && (
+        <div className="fixed inset-0 z-[9999] bg-gray-50 flex flex-col font-sans">
+          <header className="bg-white px-3 py-3 flex items-center gap-2 border-b shrink-0">
+            <button onClick={() => setChatTicketId(null)} className="p-2 -ml-1 text-gray-600 active:scale-95"><ArrowLeft size={22} /></button>
+            <div className="flex-1 min-w-0">
+              <p className="font-black text-gray-800 leading-tight truncate">{chatTicket.category}</p>
+              <p className="text-[11px] font-bold text-gray-400 truncate">{chatTicket.userName || chatTicket.userEmail || 'User'} • {chatTicket.status}</p>
+            </div>
+            {chatTicket.status !== 'closed'
+              ? <button onClick={() => setTicketStatus(chatTicket._id, 'closed')} className="text-[11px] font-black bg-gray-100 text-gray-600 px-3 py-2 rounded-xl active:scale-95 shrink-0">Close</button>
+              : <button onClick={() => setTicketStatus(chatTicket._id, 'open')} className="text-[11px] font-black bg-orange-50 text-orange-700 px-3 py-2 rounded-xl active:scale-95 shrink-0">Reopen</button>}
+          </header>
+          <div ref={adminChatScrollRef} className="flex-1 overflow-y-auto p-4 space-y-2">
+            <div className="bg-white p-3 rounded-2xl rounded-tl-md shadow-sm border border-gray-100 max-w-[92%]">
+              <p className="text-[10px] font-black text-gray-400 uppercase mb-1">User complaint</p>
+              <p className="text-sm font-bold text-gray-800">{chatTicket.message}</p>
+              {chatTicket.image && <img src={getImageUrl(chatTicket.image)} className="w-full max-h-56 rounded-xl object-cover border border-gray-200 mt-2" alt="Proof" />}
+            </div>
+            {(chatTicket.replies || []).map((r, i) => (
+              <div key={i} className={`p-3 rounded-2xl text-sm font-bold max-w-[88%] shadow-sm ${r.by === 'admin' ? 'bg-brand text-white rounded-tr-md ml-auto' : 'bg-white border border-gray-100 text-gray-800 rounded-tl-md'}`}>
+                <p className="text-[10px] uppercase opacity-60 mb-0.5 font-black">{r.by === 'admin' ? 'Aap (Admin)' : (chatTicket.userName || 'User')}</p>
+                {r.text}
+              </div>
+            ))}
+          </div>
+          <div className="p-3 bg-white border-t flex gap-2 shrink-0">
+            <input type="text" value={adminReply[chatTicket._id] || ''} onChange={(e) => setAdminReply(prev => ({ ...prev, [chatTicket._id]: e.target.value }))} placeholder="Jawab likho…" className="flex-1 p-3 bg-gray-50 rounded-2xl outline-none font-bold text-sm border" />
+            <button onClick={() => sendAdminReply(chatTicket._id)} className="bg-brand text-white w-12 rounded-2xl flex items-center justify-center active:scale-95"><Send size={18} /></button>
+          </div>
+        </div>
+      )}
 
         {/* Support Tab */}
         {activeTab === 'support' && (
@@ -359,29 +403,10 @@ export default function AdminPanel() {
                     <span className={`text-[10px] font-black px-2 py-1 rounded-lg uppercase ${t.status === 'open' ? 'bg-orange-100 text-orange-700' : t.status === 'replied' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>{t.status}</span>
                     <p className="text-xs font-black text-gray-700 mt-1">{t.category} • {t.userName || t.userEmail || 'User'}</p>
                   </div>
-                  <button onClick={() => setOpenTicketId(openTicketId === t._id ? null : t._id)} className="text-xs font-black text-brand underline shrink-0">{openTicketId === t._id ? 'Band karo' : 'Kholo'}</button>
+                  <button onClick={() => setChatTicketId(t._id)} className="text-xs font-black text-white bg-brand px-3 py-1.5 rounded-lg shrink-0 active:scale-95">Chat kholo</button>
                 </div>
                 <p className="text-sm font-bold text-gray-700">{t.message}</p>
                 {t.image && <img src={getImageUrl(t.image)} className="w-32 h-24 rounded-xl object-cover border border-gray-200 mt-2" alt="Proof" />}
-                {openTicketId === t._id && (
-                  <div className="mt-3 pt-3 border-t space-y-2">
-                    {(t.replies || []).map((r, i) => (
-                      <div key={i} className={`p-2.5 rounded-xl text-xs font-bold max-w-[90%] ${r.by === 'admin' ? 'bg-blue-50 text-blue-900 border border-blue-100 ml-auto' : 'bg-gray-100 text-gray-700'}`}>
-                        <p className="text-[10px] uppercase opacity-60 mb-0.5">{r.by === 'admin' ? 'Aap (Admin)' : (t.userName || 'User')}</p>
-                        {r.text}
-                      </div>
-                    ))}
-                    <div className="flex gap-2">
-                      <input type="text" value={adminReply[t._id] || ''} onChange={(e) => setAdminReply(prev => ({ ...prev, [t._id]: e.target.value }))} placeholder="Jawab likho…" className="flex-1 p-2.5 bg-gray-50 rounded-xl outline-none font-bold text-sm border" />
-                      <button onClick={() => sendAdminReply(t._id)} className="bg-brand text-white px-4 rounded-xl active:scale-95"><Send size={16} /></button>
-                    </div>
-                    <div className="flex gap-2">
-                      {t.status !== 'closed'
-                        ? <button onClick={() => setTicketStatus(t._id, 'closed')} className="flex-1 bg-gray-100 text-gray-600 py-2.5 rounded-xl font-black text-xs active:scale-95">Close Ticket</button>
-                        : <button onClick={() => setTicketStatus(t._id, 'open')} className="flex-1 bg-orange-50 text-orange-700 py-2.5 rounded-xl font-black text-xs active:scale-95">Dobara Kholo</button>}
-                    </div>
-                  </div>
-                )}
               </div>
             ))}
           </div>
