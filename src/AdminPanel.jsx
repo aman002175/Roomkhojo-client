@@ -235,7 +235,7 @@ export default function AdminPanel() {
       </header>
       
       {/* Tabs */}
-      <div className="flex px-4 py-3 gap-2 overflow-x-auto no-scrollbar bg-white shadow-sm border-b shrink-0">
+      <div className="order-2 flex px-4 py-3 gap-2 overflow-x-auto no-scrollbar bg-white shadow-[0_-4px_12px_rgba(0,0,0,0.06)] border-t shrink-0">
         <button onClick={() => setActiveTab('analytics')} className={`flex shrink-0 items-center gap-2 px-4 py-2 rounded-full text-sm font-bold ${activeTab === 'analytics' ? 'bg-blue-100 text-blue-700' : 'bg-gray-50 text-gray-600'}`}><BarChart3 size={16} className="shrink-0"/> Analytics</button>
         <button onClick={() => setActiveTab('pending')} className={`flex shrink-0 items-center gap-2 px-4 py-2 rounded-full text-sm font-bold ${activeTab === 'pending' ? 'bg-orange-100 text-orange-700' : 'bg-gray-50 text-gray-600'}`}><LayoutDashboard size={16} className="shrink-0"/> Pending ({pendingAds.length})</button>
         <button onClick={() => setActiveTab('live')} className={`flex shrink-0 items-center gap-2 px-4 py-2 rounded-full text-sm font-bold ${activeTab === 'live' ? 'bg-green-100 text-green-700' : 'bg-gray-50 text-gray-600'}`}><Check size={16} className="shrink-0"/> Live ({liveAds.length})</button>
@@ -243,7 +243,7 @@ export default function AdminPanel() {
         <button onClick={() => setActiveTab('support')} className={`flex shrink-0 items-center gap-2 px-4 py-2 rounded-full text-sm font-bold ${activeTab === 'support' ? 'bg-teal-100 text-teal-700' : 'bg-gray-50 text-gray-600'}`}><MessageCircle size={16} className="shrink-0"/> Support{openCount > 0 ? ` (${openCount})` : ''}</button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="order-1 flex-1 overflow-y-auto p-4 space-y-4">
         
         {/* Analytics Tab */}
         {activeTab === 'analytics' && (
