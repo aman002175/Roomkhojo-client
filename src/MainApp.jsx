@@ -6,6 +6,12 @@ import { X, Phone, MessageCircle, Map as MapIcon, List, Plus, Camera, Target, In
 import { GoogleLogin } from '@react-oauth/google';
 import { markerIcon, ICON_STAR } from './markerIcons';
 
+// Effective-featured: promo + expiry valid ho tabhi orange STAR,
+// expire ho chuka toh NORMAL green (ad gayab nahi hota).
+const isFeatured = (room) => room
+  && room.isPromoted
+  && (!room.expiryDate || new Date(room.expiryDate) > new Date());
+
 const VITE_API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const BASE_URL = VITE_API_BASE_URL ? VITE_API_BASE_URL.replace('/api', '') : 'https://roomkhojo-api.onrender.com';
 const API_URL = `${BASE_URL}/api/rooms`;
@@ -813,6 +819,7 @@ export default function MainApp() {
     markersRef.current.forEach(m => m.remove()); markersRef.current = [];
     sortedRooms.forEach(room => {
       const isSelected = selectedRoom && selectedRoom._id === room._id;
+      const featured = isFeatured(room);
       const el = document.createElement('div');
       // Select hone par: ye POP-UP (upar+zoom), baaki FADE (halke)
       const popCls = !selectedRoom
@@ -820,9 +827,9 @@ export default function MainApp() {
         : isSelected
           ? '-translate-y-4 scale-125 shadow-2xl z-40'
           : 'opacity-40 saturate-50';
-      el.className = `font-bold px-3 py-1.5 rounded-full shadow-lg border-2 border-white text-xs cursor-pointer transition-all duration-300 flex items-center gap-1 ${room.isPromoted ? 'bg-orange-500 z-20 text-white' : 'bg-green-600 z-10 text-white'} ${popCls}`;
+      el.className = `font-bold px-3 py-1.5 rounded-full shadow-lg border-2 border-white text-xs cursor-pointer transition-all duration-300 flex items-center gap-1 ${featured ? 'bg-orange-500 z-20 text-white' : 'bg-green-600 z-10 text-white'} ${popCls}`;
       // Static SVG icon (category/star) + textContent price (user-data kabhi innerHTML me nahi — XSS-safe)
-      el.innerHTML = room.isPromoted ? ICON_STAR : markerIcon(room.category);
+      el.innerHTML = featured ? ICON_STAR : markerIcon(room.category);
       const sp = document.createElement('span');
       sp.textContent = room.price;
       el.appendChild(sp);
@@ -941,7 +948,7 @@ export default function MainApp() {
           <div className="grid gap-5 pb-32">
             {sortedRooms.length === 0 ? (<div className="text-center p-10 text-gray-500 font-bold">Koi result nahi mila.</div>) : (sortedRooms.map(room => (
               <div key={room._id} className={`bg-white rounded-3xl overflow-hidden shadow-md border ${room.isPromoted ? 'border-orange-200' : 'border-gray-50'}`}>
-                <div className="relative"><img src={getImageUrl(room.image)} className="w-full h-48 object-cover bg-gray-200" alt="Room" />{room.isPromoted && <div className="absolute top-3 left-3 bg-orange-500 text-white px-3 py-1 rounded-full text-[10px] font-black uppercase flex items-center gap-1"><Star size={10} fill="currentColor" /> Featured</div>}<div className="absolute top-3 right-3 bg-white/90 px-3 py-1 rounded-full text-brand font-black">{room.price}</div></div>
+                <div className="relative"><img src={getImageUrl(room.image)} className="w-full h-48 object-cover bg-gray-200" alt="Room" />{isFeatured(room) && <div className="absolute top-3 left-3 bg-orange-500 text-white px-3 py-1 rounded-full text-[10px] font-black uppercase flex items-center gap-1"><Star size={10} fill="currentColor" /> Featured</div>}<div className="absolute top-3 right-3 bg-white/90 px-3 py-1 rounded-full text-brand font-black">{room.price}</div></div>
                 <div className="p-4">
                   <div className="flex justify-between items-start mb-1"><h3 className="font-bold text-gray-900 text-lg leading-tight">{room.title}</h3><span className="bg-gray-100 text-gray-600 px-2 py-1 rounded-lg text-[10px] font-black shrink-0 ml-2">{room.type} • {room.category}</span></div>
                   <p className="text-sm font-bold text-gray-500 flex items-center gap-1"><MapPin size={14} className="shrink-0" /> {room.landmark || 'Hanumangarh'}</p>
@@ -1027,7 +1034,7 @@ export default function MainApp() {
             <div className="relative">
               <img src={getImageUrl(roomGallery(shareRoom)[0])} className="w-full h-52 object-cover bg-gray-200" alt={shareRoom.title} />
               <div className="absolute top-3 left-3 bg-white/90 px-3 py-1 rounded-full text-brand font-black">{shareRoom.price}</div>
-              {shareRoom.isPromoted && (<div className="absolute bottom-3 left-3 bg-orange-500 text-white px-3 py-1 rounded-full text-[10px] font-black uppercase flex items-center gap-1"><Star size={10} fill="currentColor" /> Featured</div>)}
+              {isFeatured(shareRoom) && (<div className="absolute bottom-3 left-3 bg-orange-500 text-white px-3 py-1 rounded-full text-[10px] font-black uppercase flex items-center gap-1"><Star size={10} fill="currentColor" /> Featured</div>)}
             </div>
             <div className="p-4">
               <div className="text-center mb-1"><h3 className="font-black text-gray-900 text-xl leading-tight">Room<span className="text-brand">Khojo</span></h3></div>

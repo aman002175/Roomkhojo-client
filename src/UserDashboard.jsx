@@ -255,8 +255,8 @@ export default function UserDashboard() {
                           </div>
                         )}
                         {room.isApproved && isExpired && (
-                          <div className="absolute top-0 left-0 right-0 bg-red-500 text-white text-[10px] font-black text-center py-1 uppercase tracking-widest z-10 shadow-sm flex items-center justify-center gap-1">
-                            <AlertTriangle size={12} /> Promo Plan Expired (Hidden from map)
+                          <div className="absolute top-0 left-0 right-0 bg-blue-500 text-white text-[10px] font-black text-center py-1 uppercase tracking-widest z-10 shadow-sm flex items-center justify-center gap-1">
+                            <AlertTriangle size={12} /> Promo khatam — Normal ad live hai
                           </div>
                         )}
                         {room.isApproved && isExpiringSoon && (
@@ -271,7 +271,7 @@ export default function UserDashboard() {
                               <div>
                                   <div className="flex justify-between items-start">
                                       <h3 className="font-black text-gray-800 leading-tight line-clamp-1">{room.title}</h3>
-                                      {room.isPromoted && <span className="text-[10px] bg-orange-100 text-orange-600 px-2 py-1 rounded-lg font-black uppercase shrink-0 ml-2 inline-flex items-center gap-1"><Star size={10} fill="currentColor" /> Promoted</span>}
+                                      {room.isPromoted && !isExpired && <span className="text-[10px] bg-orange-100 text-orange-600 px-2 py-1 rounded-lg font-black uppercase shrink-0 ml-2 inline-flex items-center gap-1"><Star size={10} fill="currentColor" /> Promoted</span>}
                                   </div>
                                   <p className="text-brand font-black mt-1">{room.price}</p>
                                   <p className="text-xs font-bold text-gray-400 mt-1 flex items-center gap-1"><MapPin size={12}/> {room.landmark || 'Hanumangarh'}</p>
@@ -296,6 +296,7 @@ export default function UserDashboard() {
                           <div className="flex gap-2">
                             {/* 🔄 RENEW BUTTON (expired promo par) */}
                             {isExpired && (<button onClick={() => { setRenewRoom(room); setRenewPlan(room.promoPlan && room.promoPlan !== 'regular' ? room.promoPlan : '7'); setRenewRef(''); }} className="text-[11px] font-black text-white bg-orange-500 px-3 py-1.5 rounded-lg active:scale-95 flex items-center gap-1"><RefreshCw size={12} /> Renew</button>)}
+                            {!room.isPromoted && !isExpired && (<button onClick={() => { setRenewRoom(room); setRenewPlan('7'); setRenewRef(''); }} className="text-[11px] font-black text-white bg-brand px-3 py-1.5 rounded-lg active:scale-95 flex items-center gap-1"><Star size={12} fill="currentColor" /> Promote</button>)}
                             {/* 🚨 EDIT BUTTON */}
                             <button onClick={() => openEditModal(room)} className="text-[11px] font-black text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg active:scale-95 flex items-center gap-1 transition-colors hover:bg-blue-100"><Edit3 size={14}/> Edit</button>
                             <button onClick={() => deleteRoom(room._id)} className="text-[11px] font-black text-red-600 bg-red-50 p-1.5 px-3 rounded-lg active:scale-95 flex items-center gap-1 transition-colors hover:bg-red-100"><Trash2 size={14}/> Delete</button>
@@ -315,7 +316,7 @@ export default function UserDashboard() {
         <div className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4">
           <div className="bg-white w-full max-w-md rounded-t-[30px] sm:rounded-3xl p-6 shadow-2xl relative">
             <button onClick={() => setRenewRoom(null)} className="absolute top-4 right-4 bg-gray-100 p-2 rounded-full active:scale-90"><X size={20}/></button>
-            <h2 className="text-xl font-black mb-1 flex items-center gap-2"><RefreshCw size={20} /> Renew Promo</h2>
+            <h2 className="text-xl font-black mb-1 flex items-center gap-2">{renewRoom && renewRoom.promoPlan !== 'regular' ? (<><RefreshCw size={20} /> Renew Promo</>) : (<><Star size={20} className="text-orange-500" fill="currentColor" /> Promote Ad</>)}</h2>
             <p className="text-xs font-bold text-gray-500 mb-4 line-clamp-1">{renewRoom.title}</p>
             <div className="flex gap-2 mb-4">
               {['7', '15', '30'].map(d => (
