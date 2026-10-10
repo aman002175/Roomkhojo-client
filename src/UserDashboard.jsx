@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User, LogOut, Star, ArrowLeft, Settings, Bell, MapPin, Trash2, Edit3, X, Camera, ShieldAlert } from 'lucide-react';
+import { User, LogOut, Star, ArrowLeft, Settings, Bell, MapPin, Trash2, Edit3, X, Camera, ShieldAlert, Phone } from 'lucide-react';
 
 const VITE_API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const BASE_URL = VITE_API_BASE_URL ? VITE_API_BASE_URL.replace('/api', '') : 'https://roomkhojo-api.onrender.com';
@@ -39,6 +39,24 @@ export default function UserDashboard() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [sysSettings, setSysSettings] = useState({ facilities: ['Wi-Fi', 'AC', 'Water 24x7', 'Electricity', 'Geyser', 'RO Water', 'Parking', 'CCTV', 'Meals', 'Attached Washroom'] });
 
+  // ❤️ Saved ads (favorites) + unsave
+  const [savedRooms, setSavedRooms] = useState([]);
+
+  const fetchSaved = () => {
+    fetch(`${BASE_URL}/api/users/favorites`, { headers: authHeaders() })
+      .then(res => res.json())
+      .then(data => { if (data.success) setSavedRooms(data.rooms || []); })
+      .catch(() => { /* saved optional */ });
+  };
+
+  const unsaveRoom = async (roomId) => {
+    try {
+      const res = await fetch(`${BASE_URL}/api/users/favorites/${roomId}/toggle`, { method: 'POST', headers: authHeaders() });
+      const data = await res.json();
+      if (data.success && !data.saved) setSavedRooms(savedRooms.filter(r => r._id !== roomId));
+    } catch { alert('Server connection failed.'); }
+  };
+
   useEffect(() => {
     if (!currentUser) { navigate('/'); return; }
     fetch(`${BASE_URL}/api/rooms/user/${currentUser.id}`, { headers: authHeaders() })
@@ -49,6 +67,7 @@ export default function UserDashboard() {
       .then(res => res.json())
       .then(data => { if (data.success && data.settings) setSysSettings(data.settings); })
       .catch(() => { /* settings optional: defaults use honge */ });
+    fetchSaved();
   }, [navigate, currentUser, refreshKey]);
 
   const handleLogout = () => { localStorage.removeItem('roomkhojo_user'); localStorage.removeItem('roomkhojo_token'); navigate('/'); window.location.reload(); };
@@ -335,6 +354,32 @@ export default function UserDashboard() {
             <div className="p-4 border-t bg-white sticky bottom-0 z-10 shrink-0">
               <button onClick={handleLogout} className="w-full bg-red-50 text-red-600 py-4 rounded-2xl font-black text-lg flex items-center justify-center gap-2 active:scale-95"><LogOut size={20}/> Logout</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ❤️ SAVED ADS */}
+      {savedRooms.length > 0 && (
+        <div className="mt-6">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-black text-gray-800">❤️ Saved Ads</h2>
+            <span className="bg-pink-100 text-pink-600 px-3 py-1 rounded-full text-xs font-black">{savedRooms.length} Total</span>
+          </div>
+          <div className="grid gap-3 pb-10">
+            {savedRooms.map(room => (
+              <div key={room._id} className="bg-white rounded-2xl overflow-hidden shadow-sm border border-pink-100 p-3 flex gap-3 items-center">
+                <img src={getImageUrl(room.image)} className="w-16 h-16 rounded-xl object-cover bg-gray-200 shrink-0" alt="Room" />
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-black text-gray-800 leading-tight truncate">{room.title}</h3>
+                  <p className="text-brand font-black text-sm">{room.price}</p>
+                  <p className="text-[11px] font-bold text-gray-400">📍 {room.landmark || 'Hanumangarh'}</p>
+                </div>
+                <div className="flex flex-col gap-2 shrink-0">
+                  <a href={`tel:${room.mobile}`} className="bg-brand text-white p-2 rounded-xl flex items-center justify-center active:scale-95"><Phone size={16}/></a>
+                  <button onClick={() => unsaveRoom(room._id)} className="bg-red-50 text-red-600 p-2 rounded-xl flex items-center justify-center active:scale-95"><Trash2 size={16}/></button>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}

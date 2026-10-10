@@ -68,6 +68,9 @@ const SAT_STYLE = {
   layers: [{ id: 'esriSat', type: 'raster', source: 'esriSat' }]
 };
 
+// 💰 "₹5,500" → 5500 (filter/sort ke liye)
+const priceNum = (p) => Number(String(p || '').replace(/\D/g, '')) || 0;
+
 // 📍 Haversine distance (meters) + format
 const distMeters = (lat1, lng1, lat2, lng2) => {
   const R = 6371000;
@@ -148,6 +151,16 @@ export default function MainApp() {
   const [selectedRoom, setSelectedRoom] = useState(null);
   const [activeCategory, setActiveCategory] = useState('all');
   const [activeAudience, setActiveAudience] = useState('all');
+  // 🔍 Filters: price range + sort + radius
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [minPrice, setMinPrice] = useState('');
+  const [maxPrice, setMaxPrice] = useState('');
+  const [sortBy, setSortBy] = useState('new');
+  const [nearRadius, setNearRadius] = useState(0);
+  const [userLoc, setUserLoc] = useState(null);
+  // ❤️ Favorites + 🔗 Share
+  const [savedIds, setSavedIds] = useState([]);
+  const [shareRoom, setShareRoom] = useState(null);
   const [bannerRooms, setBannerRooms] = useState([]);
   const [bannerIndex, setBannerIndex] = useState(0);
   const [wantBanner, setWantBanner] = useState(false);
@@ -217,7 +230,17 @@ export default function MainApp() {
   useEffect(() => {
     fetch(`${API_URL}`)
       .then(res => res.json())
-      .then(data => { if (data.success) setRooms(data.rooms); })
+      .then(data => {
+        if (data.success) {
+          setRooms(data.rooms);
+          // 🔗 Shared link (?room=id) se aaye ho toh popup kholo
+          const rid = new URLSearchParams(window.location.search).get('room');
+          if (rid) {
+            const found = (data.rooms || []).find(r => r._id === rid);
+            if (found) { setSelectedRoom(found); markRoomViewed(found); }
+          }
+        }
+      })
       .catch(() => { /* list load fail: agli baar retry hoga */ });
     fetch(`${ADMIN_API}/settings`)
       .then(res => res.json())
@@ -396,10 +419,41 @@ export default function MainApp() {
   const filteredRooms = rooms.filter(r => {
     const matchesCategory = activeCategory === 'all' || r.category === activeCategory;
     const matchesAudience = activeAudience === 'all' || (r.type || '') === activeAudience;
+    const price = priceNum(r.price);
+    const okMin = minPrice === '' || price >= Number(minPrice);
+    const okMax = maxPrice === '' || price <= Number(maxPrice);
+    let okNear = true;
+    if (nearRadius !== 0 && userLoc) {
+      okNear = distMeters(userLoc.lat, userLoc.lng, r.lat, r.lng) <= nearRadius * 1000;
+    }
     const searchStr = searchQuery.toLowerCase();
     const matchesSearch = r.title.toLowerCase().includes(searchStr) || (r.landmark || 'hanumangarh').toLowerCase().includes(searchStr) || r.type.toLowerCase().includes(searchStr) || r.category.toLowerCase().includes(searchStr);
-    return matchesCategory && matchesAudience && matchesSearch;
+    return matchesCategory && matchesAudience && matchesSearch && okMin && okMax && okNear;
   });
+
+  // Sort: newest / price low-high / high-low
+  const sortedRooms = [...filteredRooms].sort((a, b) => {
+    if (sortBy === 'lo') return priceNum(a.price) - priceNum(b.price);
+    if (sortBy === 'hi') return priceNum(b.price) - priceNum(a.price);
+    return new Date(b.createdAt) - new Date(a.createdAt);
+  });
+
+  const activeFilterCount = (minPrice !== '' ? 1 : 0) + (maxPrice !== '' ? 1 : 0)
+    + (sortBy !== 'new' ? 1 : 0) + (nearRadius !== 0 ? 1 : 0);
+
+  // 📍 Nearby radius cycle (location lekar)
+  const cycleRadius = () => {
+    const opts = [0, 2, 5, 10];
+    const next = opts[(opts.indexOf(nearRadius) + 1) % opts.length];
+    if (next === 0) { setNearRadius(0); return; }
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => { setUserLoc({ lat: pos.coords.latitude, lng: pos.coords.longitude }); setNearRadius(next); },
+        () => alert('Location on karo nearby filter ke liye.'),
+        { enableHighAccuracy: true, timeout: 8000 }
+      );
+    } else alert('Browser location not supported.');
+  };
 
   // 🎯 Banner strip data + auto-flip (har 4 sec)
   useEffect(() => {
@@ -470,10 +524,11 @@ export default function MainApp() {
     });
   };
 
-  // 👁 Popup khulne par view +1 (session me ek room ek baar — spam-proof)
+  // Popup khulne par link me ?room=id lagao (share/copy ke liye)
   const openRoomPopup = (room) => {
     setSelectedRoom(room);
     markRoomViewed(room);
+    if (room && room._id) window.history.replaceState(null, '', `?room=${room._id}`);
   };
 
   const openBannerRoom = (e) => {
@@ -483,6 +538,55 @@ export default function MainApp() {
     setSelectedRoom(b);
     setView('map');
     if (map.current) map.current.flyTo({ center: [b.lng, b.lat], zoom: 15.5 });
+  };
+
+  // ❤️ Favorites load (login par) + toggle
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    fetch(`${BASE_URL}/api/users/favorites`, { headers: authHeaders() })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) setSavedIds((data.rooms || []).map(r => r._id));
+        else setSavedIds([]);
+      })
+      .catch(() => setSavedIds([]));
+  }, [isLoggedIn]);
+
+  const toggleFavorite = async (roomId) => {
+    if (!isLoggedIn) { setAuthMode('login'); return; }
+    try {
+      const res = await fetch(`${BASE_URL}/api/users/favorites/${roomId}/toggle`, { method: 'POST', headers: authHeaders() });
+      const data = await res.json();
+      if (data.success) setSavedIds(prev => data.saved ? [...prev, roomId] : prev.filter(id => id !== roomId));
+      else alert(data.message || 'Fail ho gaya.');
+    } catch { alert('Server connection failed.'); }
+  };
+
+  // 🔗 Share helpers — visiting-card link backend /r/:id se (OG preview ke saath)
+  const shareUrl = (room) => `${BASE_URL}/r/${room._id}`;
+  const shareText = (room) => `${room.title} — ${room.price} (${room.category} • ${room.type})\n📍 ${room.landmark || 'Hanumangarh'}\nDekho: ${shareUrl(room)}`;
+
+  const shareWhatsApp = (room) => {
+    window.open(`https://wa.me/?text=${encodeURIComponent(shareText(room))}`, '_blank');
+  };
+
+  const copyShareLink = async (room) => {
+    try {
+      await navigator.clipboard.writeText(shareText(room));
+      alert('Link copy ho gaya! ✅');
+    } catch { alert(shareUrl(room)); }
+  };
+
+  const nativeShare = async (room) => {
+    if (navigator.share) {
+      try { await navigator.share({ title: room.title, text: `${room.title} — ${room.price}`, url: shareUrl(room) }); } catch { /* user ne cancel kiya */ }
+    } else copyShareLink(room);
+  };
+
+  // Popup band karo + shared-link param saaf karo
+  const closeRoomPopup = () => {
+    setSelectedRoom(null);
+    window.history.replaceState(null, '', window.location.pathname);
   };
 
   const handleReportUnavailable = async (roomId) => {
@@ -499,7 +603,7 @@ export default function MainApp() {
   useEffect(() => {
     if (!map.current) return;
     markersRef.current.forEach(m => m.remove()); markersRef.current = [];
-    filteredRooms.forEach(room => {
+    sortedRooms.forEach(room => {
       const isSelected = selectedRoom && selectedRoom._id === room._id;
       const el = document.createElement('div'); 
       el.className = `font-bold px-3 py-1.5 rounded-full shadow-lg border-2 border-white text-xs cursor-pointer transition-all duration-300 ${room.isPromoted ? 'bg-orange-500 z-20 text-white' : 'bg-green-600 z-10 text-white'} ${isSelected ? '-translate-y-3 scale-110 shadow-2xl z-40' : 'active:scale-90'}`; 
@@ -509,7 +613,7 @@ export default function MainApp() {
       el.addEventListener('click', onClick); el.addEventListener('touchstart', onClick);
       const marker = new maplibregl.Marker({ element: el }).setLngLat([room.lng, room.lat]).addTo(map.current); markersRef.current.push(marker);
     });
-  }, [filteredRooms, selectedRoom]);
+  }, [sortedRooms, selectedRoom]);
 
   const handlePostAdClick = () => {
     if (!isLoggedIn) {
@@ -534,6 +638,23 @@ export default function MainApp() {
         <header className="px-4 py-3 flex justify-between items-center border-b border-gray-50"><div className="flex items-center gap-3"><button onClick={() => setIsMenuOpen(true)} className="p-2 -ml-2 text-gray-600 active:scale-95"><Menu size={26} /></button><div className="flex flex-col"><h1 className="text-2xl font-black text-gray-800 tracking-tighter leading-tight">Room<span className="text-brand">Khojo</span></h1><a href="https://aman-bishnoi-wrold.oneapp.dev/#portfolio" target="_blank" rel="noreferrer" className="text-[11px] font-bold text-gray-500 hover:opacity-80 transition-opacity leading-none mt-0.5 tracking-tight">Built with 💝 by <span className="text-brand">Aman Bishnoi</span></a></div></div><button onClick={() => isLoggedIn ? navigate('/dashboard') : setAuthMode('login')} className={`w-10 h-10 border rounded-full flex items-center justify-center active:scale-95 transition-all ${isLoggedIn ? 'bg-brand text-white border-brand shadow-lg shadow-brand/30' : 'bg-gray-50 text-gray-600'}`}><User size={22} /></button></header>
         <div className="px-4 pt-3"><div className="relative flex items-center"><Search className="absolute left-3 text-gray-400" size={18} /><input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onKeyDown={handleMapSearch} placeholder="Enter city (e.g. Ganganagar) & Search..." className="w-full bg-gray-100 text-sm font-bold text-gray-700 rounded-2xl py-3 pl-10 pr-24 outline-none border border-transparent focus:border-brand/30 transition-colors"/><button onClick={handleMapSearch} className="absolute right-2 bg-brand text-white text-xs font-black px-4 py-2 rounded-xl active:scale-95 transition-transform shadow-md">Go 🚀</button></div></div>
         <div className="flex overflow-x-auto no-scrollbar py-3 px-4 gap-3">{dynamicCategories.map((cat) => (<button key={cat.id} onClick={() => { setActiveCategory(cat.id); setActiveAudience('all'); }} className={`flex shrink-0 items-center gap-2 px-4 py-2 rounded-2xl text-sm font-bold whitespace-nowrap ${activeCategory === cat.id ? 'bg-brand text-white shadow-lg shadow-brand/30 scale-105' : 'bg-gray-100 text-gray-600'}`}><span>{cat.icon}</span><span>{cat.name}</span></button>))}</div>
+        {/* 🔍 FILTERS (price + sort + radius) */}
+        <div className="px-4 pb-3">
+          <button onClick={() => setFiltersOpen(!filtersOpen)} className="flex items-center gap-2 bg-gray-100 px-4 py-2 rounded-2xl text-xs font-black text-gray-600 active:scale-95">🔍 Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}<span>{filtersOpen ? '▲' : '▼'}</span></button>
+          {filtersOpen && (
+            <div className="mt-2 bg-gray-50 border border-gray-200 rounded-2xl p-3 space-y-2">
+              <div className="flex gap-2">
+                <input type="number" value={minPrice} onChange={(e) => setMinPrice(e.target.value)} placeholder="Min ₹" className="flex-1 p-2.5 bg-white rounded-xl outline-none font-bold text-sm border" />
+                <input type="number" value={maxPrice} onChange={(e) => setMaxPrice(e.target.value)} placeholder="Max ₹" className="flex-1 p-2.5 bg-white rounded-xl outline-none font-bold text-sm border" />
+              </div>
+              <div className="flex gap-2">
+                <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="flex-1 p-2.5 bg-white rounded-xl outline-none font-bold text-sm border"><option value="new">🆕 Newest</option><option value="lo">💰 Price: Low-High</option><option value="hi">💎 Price: High-Low</option></select>
+                <button onClick={cycleRadius} className={`flex-1 p-2.5 rounded-xl font-black text-sm border active:scale-95 ${nearRadius !== 0 ? 'bg-brand text-white border-brand' : 'bg-white text-gray-600'}`}>📍 {nearRadius === 0 ? 'Nearby: Off' : `${nearRadius} km me`}</button>
+              </div>
+              {activeFilterCount > 0 && (<button onClick={() => { setMinPrice(''); setMaxPrice(''); setSortBy('new'); setNearRadius(0); }} className="w-full text-xs font-black text-red-500 underline">Clear filters</button>)}
+            </div>
+          )}
+        </div>
         {activeCategory !== 'all' && (
           <div className="flex overflow-x-auto no-scrollbar pb-3 px-4 gap-2">
             {['all', ...typesForCategory(activeCategory)].map(aud => (
@@ -595,7 +716,7 @@ export default function MainApp() {
         
         <div className={`absolute inset-0 z-20 bg-background overflow-y-auto p-4 transition-transform duration-500 ${view === 'list' ? 'translate-y-0' : 'translate-y-full'}`}>
           <div className="grid gap-5 pb-32">
-            {filteredRooms.length === 0 ? (<div className="text-center p-10 text-gray-500 font-bold">Koi result nahi mila.</div>) : (filteredRooms.map(room => (
+            {sortedRooms.length === 0 ? (<div className="text-center p-10 text-gray-500 font-bold">Koi result nahi mila.</div>) : (sortedRooms.map(room => (
               <div key={room._id} className={`bg-white rounded-3xl overflow-hidden shadow-md border ${room.isPromoted ? 'border-orange-200' : 'border-gray-50'}`}>
                 <div className="relative"><img src={getImageUrl(room.image)} className="w-full h-48 object-cover bg-gray-200" alt="Room" />{room.isPromoted && <div className="absolute top-3 left-3 bg-orange-500 text-white px-3 py-1 rounded-full text-[10px] font-black uppercase">⭐ Featured</div>}<div className="absolute top-3 right-3 bg-white/90 px-3 py-1 rounded-full text-brand font-black">{room.price}</div></div>
                 <div className="p-4">
@@ -603,7 +724,7 @@ export default function MainApp() {
                   <p className="text-sm font-bold text-gray-500">📍 {room.landmark || 'Hanumangarh'}</p>
                   {Array.isArray(room.landmarks) && room.landmarks.length > 0 && (<p className="text-[11px] font-bold text-purple-700 mt-1">🏛️ {room.landmarks.slice(0, 3).map(l => `${l.name} (${fmtDist(l.distM)})`).join(' • ')}{room.landmarks.length > 3 ? ` +${room.landmarks.length - 3} aur` : ''}</p>)}
                   <div className="flex gap-2 mt-3 items-center">
-                    <button onClick={() => handleReportUnavailable(room._id)} className="text-[10px] bg-red-50 text-red-600 px-2 py-1.5 rounded-lg font-bold border border-red-100 active:scale-95">Unavailable?</button>
+                    <button onClick={() => handleReportUnavailable(room._id)} className="text-[10px] bg-red-50 text-red-600 px-2 py-1.5 rounded-lg font-bold border border-red-100 active:scale-95">Unavailable?</button><button onClick={() => toggleFavorite(room._id)} className="text-[10px] bg-pink-50 text-pink-600 px-2 py-1.5 rounded-lg font-bold border border-pink-100 active:scale-95">{savedIds.includes(room._id) ? '❤️ Saved' : '🤍 Save'}</button><button onClick={() => setShareRoom(room)} className="text-[10px] bg-blue-50 text-blue-600 px-2 py-1.5 rounded-lg font-bold border border-blue-100 active:scale-95">🔗 Share</button>
                   </div>
                   <div className="flex gap-3 mt-3"><a href={`tel:${room.mobile}`} className="flex-1 bg-brand text-white py-2 rounded-xl font-black flex items-center justify-center gap-2 text-sm active:scale-95 transition-transform"><Phone size={16}/> Call</a><a href={`https://wa.me/91${room.mobile}?text=${encodeURIComponent(`Namaste! Maine RoomKhojo par aapka room "${room.title}" dekha. Kya ye abhi available hai? \n\nRoom Link: ${window.location.href}`)}`} target="_blank" rel="noreferrer" className="w-12 border-2 border-[#25D366] text-[#25D366] flex items-center justify-center rounded-xl active:scale-95 transition-transform"><MessageCircle size={18}/></a><a href={`https://www.google.com/maps/dir/?api=1&destination=${room.lat},${room.lng}`} target="_blank" rel="noreferrer" className="w-12 bg-blue-50 text-blue-600 flex items-center justify-center rounded-xl active:scale-95 transition-transform border border-blue-200"><Navigation size={18}/></a></div>
                 </div>
@@ -614,12 +735,12 @@ export default function MainApp() {
 
         {selectedRoom && view === 'map' && !isPickingLocation && (
             <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-[92%] max-h-[42dvh] overflow-y-auto bg-white rounded-2xl shadow-2xl z-[100] p-3 border border-gray-100">
-              <button onClick={() => setSelectedRoom(null)} className="absolute top-2 right-2 w-8 h-8 bg-white shadow-lg rounded-full flex items-center justify-center text-gray-600 z-10"><X size={18}/></button>
+              <button onClick={closeRoomPopup} className="absolute top-2 right-2 w-8 h-8 bg-white shadow-lg rounded-full flex items-center justify-center text-gray-600 z-10"><X size={18}/></button>
             <div className="flex gap-3 mb-2"><div className="flex gap-2 overflow-x-auto shrink-0 max-w-[45%] no-scrollbar">{roomGallery(selectedRoom).map((u, i) => (<img key={i} src={getImageUrl(u)} className="w-16 h-16 object-cover rounded-xl bg-gray-200 shrink-0 border border-gray-100" alt={`Room ${i + 1}`} />))}</div><div className="flex-1"><div className="flex justify-between items-start"><h3 className="font-black text-gray-800 line-clamp-1">{selectedRoom.title}</h3><span className="bg-brand/10 text-brand px-2 py-1 rounded-lg text-[10px] font-black shrink-0 ml-1">{selectedRoom.category}</span></div><p className="text-brand font-black text-xl leading-none mt-1">{selectedRoom.price}</p><p className="text-[11px] font-bold text-gray-500 mt-1.5 flex items-center gap-1"><User size={12}/> {selectedRoom.ownerName || 'Owner'} <span className="mx-1">•</span> <Phone size={12}/> {selectedRoom.mobile}</p></div></div>
             {selectedRoom.description && (<div className="flex gap-1.5 mb-2 pt-2 border-t border-gray-50 overflow-x-auto no-scrollbar flex-nowrap">{selectedRoom.description.split(', ').map(fac => (<span key={fac} className="bg-gray-50 text-gray-600 border px-2 py-1 rounded-md text-[9px] font-bold uppercase shrink-0">{fac}</span>))}</div>)}
             {Array.isArray(selectedRoom.landmarks) && selectedRoom.landmarks.length > 0 && (<div className="bg-purple-50 border border-purple-100 rounded-xl p-2 mb-2"><p className="text-[10px] font-black text-purple-700 uppercase mb-1">📍 Aas-paas ki jagah</p>{selectedRoom.landmarks.map((l, i) => (<p key={i} className="text-[11px] font-bold text-gray-700">{l.cat} {l.name} — <span className="text-purple-700">{fmtDist(l.distM)}</span></p>))}</div>)}
             <div className="flex gap-2 items-center mb-3">
-              <button onClick={() => handleReportUnavailable(selectedRoom._id)} className="text-[10px] bg-red-50 text-red-600 px-2 py-1 rounded border border-red-100 active:scale-95 font-bold shrink-0">Unavailable?</button>
+              <button onClick={() => handleReportUnavailable(selectedRoom._id)} className="text-[10px] bg-red-50 text-red-600 px-2 py-1 rounded border border-red-100 active:scale-95 font-bold shrink-0">Unavailable?</button><button onClick={() => toggleFavorite(selectedRoom._id)} className="text-[10px] bg-pink-50 text-pink-600 px-2 py-1 rounded border border-pink-100 active:scale-95 font-bold shrink-0">{savedIds.includes(selectedRoom._id) ? '❤️ Saved' : '🤍 Save'}</button><button onClick={() => setShareRoom(selectedRoom)} className="text-[10px] bg-blue-50 text-blue-600 px-2 py-1 rounded border border-blue-100 active:scale-95 font-bold shrink-0">🔗 Share</button>
             </div>
             <div className="flex gap-2"><a href={`tel:${selectedRoom.mobile}`} className="flex-1 bg-brand text-white py-2 rounded-xl text-[11px] font-black flex items-center justify-center gap-1.5 active:scale-95"><Phone size={14}/> Call</a><a href={`https://wa.me/91${selectedRoom.mobile}?text=${encodeURIComponent(`Namaste! Maine RoomKhojo par aapka room "${selectedRoom.title}" dekha. Kya ye abhi available hai? \n\nRoom Link: ${window.location.href}`)}`} target="_blank" rel="noreferrer" className="flex-1 border-2 border-[#25D366] text-[#25D366] py-2 rounded-xl text-[11px] font-black flex items-center justify-center gap-1.5 active:scale-95"><MessageCircle size={14}/> WhatsApp</a><a href={`https://www.google.com/maps/dir/?api=1&destination=${selectedRoom.lat},${selectedRoom.lng}`} target="_blank" rel="noreferrer" className="flex-1 bg-blue-50 text-blue-600 border border-blue-200 py-2 rounded-xl text-[11px] font-black flex items-center justify-center gap-1.5 active:scale-95"><Navigation size={14}/> Navigate</a></div>
           </div>
@@ -670,6 +791,35 @@ export default function MainApp() {
               <input type="text" value={payRef} onChange={(e) => setPayRef(e.target.value)} placeholder="UPI Ref / UTR No. (payment ke baad milta hai)" className="w-full p-4 bg-gray-50 rounded-2xl outline-none font-bold text-sm mb-3 border" />
               <button onClick={() => submitAd()} disabled={isSubmitting} className="w-full bg-green-50 text-green-700 py-4 rounded-2xl font-black flex items-center justify-center border border-green-200 active:scale-95 transition-transform">{isSubmitting ? 'Verifying...' : '✅ I have completed the payment'}</button>
               <button onClick={() => setShowPaymentWindow(false)} className="mt-4 text-sm font-bold text-gray-400 underline">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🔗 SHARE VISITING-CARD MODAL */}
+      {shareRoom && (
+        <div className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl relative">
+            <button onClick={() => setShareRoom(null)} className="absolute top-3 right-3 z-10 w-8 h-8 bg-black/50 text-white shadow-lg rounded-full flex items-center justify-center"><X size={18}/></button>
+            <div className="relative">
+              <img src={getImageUrl(roomGallery(shareRoom)[0])} className="w-full h-52 object-cover bg-gray-200" alt={shareRoom.title} />
+              <div className="absolute top-3 left-3 bg-white/90 px-3 py-1 rounded-full text-brand font-black">{shareRoom.price}</div>
+              {shareRoom.isPromoted && (<div className="absolute bottom-3 left-3 bg-orange-500 text-white px-3 py-1 rounded-full text-[10px] font-black uppercase">⭐ Featured</div>)}
+            </div>
+            <div className="p-4">
+              <div className="text-center mb-1"><h3 className="font-black text-gray-900 text-xl leading-tight">Room<span className="text-brand">Khojo</span></h3></div>
+              <h4 className="font-black text-gray-800 leading-tight">{shareRoom.title}</h4>
+              <p className="text-xs font-bold text-gray-500 mt-1">{shareRoom.category} • {shareRoom.type} • 📍 {shareRoom.landmark || 'Hanumangarh'}</p>
+              <p className="text-[11px] font-bold text-gray-500 mt-1 flex items-center gap-1"><User size={12}/> {shareRoom.ownerName || 'Owner'} <span className="mx-1">•</span> <Phone size={12}/> {shareRoom.mobile}</p>
+              {shareRoom.description && (<p className="text-[11px] font-bold text-gray-600 mt-2 bg-gray-50 p-2 rounded-lg border line-clamp-2">{shareRoom.description}</p>)}
+              <div className="mt-2 p-2 bg-blue-50 border border-blue-100 rounded-xl flex items-center justify-between gap-2">
+                <p className="text-[10px] font-bold text-blue-700 truncate flex-1">{shareUrl(shareRoom)}</p>
+                <button onClick={() => copyShareLink(shareRoom)} className="text-[10px] font-black bg-blue-600 text-white px-2 py-1.5 rounded-lg shrink-0 active:scale-95">Copy</button>
+              </div>
+              <div className="flex gap-2 mt-3">
+                <button onClick={() => shareWhatsApp(shareRoom)} className="flex-1 bg-[#25D366] text-white py-3 rounded-2xl font-black text-sm flex items-center justify-center gap-2 active:scale-95"><MessageCircle size={18}/> WhatsApp</button>
+                <button onClick={() => nativeShare(shareRoom)} className="flex-1 bg-slate-900 text-white py-3 rounded-2xl font-black text-sm active:scale-95">↗ More</button>
+              </div>
             </div>
           </div>
         </div>
