@@ -562,8 +562,9 @@ export default function MainApp() {
     } catch { alert('Server connection failed.'); }
   };
 
-  // 🔗 Share helpers — visiting-card link backend /r/:id se (OG preview ke saath)
-  const shareUrl = (room) => `${BASE_URL}/r/${room._id}`;
+  // 🔗 Share helpers — FRONTEND deep-link (app seedha ad kholegi).
+  // (Backend /r/:id ab sirf puraane links ka redirect-fallback hai.)
+  const shareUrl = (room) => `${window.location.origin}/?room=${room._id}`;
   const shareText = (room) => `${room.title} — ${room.price} (${room.category} • ${room.type})\n📍 ${room.landmark || 'Hanumangarh'}\nDekho: ${shareUrl(room)}`;
 
   const shareWhatsApp = (room) => {
