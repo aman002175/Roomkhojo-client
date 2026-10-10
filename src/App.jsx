@@ -9,7 +9,7 @@ const UserDashboard = lazy(() => import('./UserDashboard'));
 const LegalPage = lazy(() => import('./LegalPage'));
 const Support = lazy(() => import('./Support'));
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://roomkhojo-api.onrender.com';
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'https://roomkhojo-api.onrender.com').replace('/api', '');
 const DEFAULT_ADMIN_PATH = '/admin-secret-29';
 
 // Path normalize: / se shuru ho, aas-paas space na ho
