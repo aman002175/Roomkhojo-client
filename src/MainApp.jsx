@@ -368,7 +368,35 @@ export default function MainApp() {
     setMaxPrice(n >= PRICE_CAP ? '' : String(Math.max(n, priceLo)));
   };
   const inr = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
-  const THUMB = 'pointer-events-auto appearance-none w-5 h-5 rounded-full bg-white border-[3px] border-brand shadow cursor-pointer [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-[3px] [&::-webkit-slider-thumb]:border-brand [&::-webkit-slider-thumb]:shadow [&::-webkit-slider-thumb]:cursor-pointer [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:border-[3px] [&::-moz-range-thumb]:border-brand';
+
+  // Dots ko ungli/mouse se ghaseeto (pointer drag — har browser me same).
+  // Ref-free: track element event se milta hai (lint-clean).
+  const onDotDown = (which) => (e) => {
+    e.preventDefault();
+    const track = e.currentTarget.parentElement;
+    if (!track) return;
+    const rect = track.getBoundingClientRect();
+    const toVal = (clientX) => {
+      const pct = Math.min(100, Math.max(0, ((clientX - rect.left) / rect.width) * 100));
+      return Math.round(((pct / 100) * PRICE_CAP) / 500) * 500;
+    };
+    const move = (ev) => {
+      if (ev.cancelable) ev.preventDefault();
+      const v = toVal(ev.touches ? ev.touches[0].clientX : ev.clientX);
+      if (which === 'min') onMinSlide(v);
+      else onMaxSlide(v);
+    };
+    const up = () => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+      window.removeEventListener('touchmove', move);
+      window.removeEventListener('touchend', up);
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+    window.addEventListener('touchmove', move, { passive: false });
+    window.addEventListener('touchend', up);
+  };
 
   const getAdAmount = () => {
     if (adType === 'regular') return sysSettings.pricing.regular;
@@ -830,11 +858,11 @@ export default function MainApp() {
             <div className="mt-2 bg-gray-50 border border-gray-200 rounded-2xl p-3 space-y-2">
               <div className="px-1">
                 <div className="flex justify-between text-[11px] font-black mb-1"><span className="bg-brand/10 text-brand px-2 py-1 rounded-lg">{minPrice === '' ? 'Min' : inr(minPrice)}</span><span className="text-gray-400 font-bold self-center">ke beech</span><span className="bg-brand/10 text-brand px-2 py-1 rounded-lg">{maxPrice === '' ? 'Max' : inr(maxPrice)}</span></div>
-                <div className="relative h-7">
-                  <div className="absolute top-1/2 -translate-y-1/2 left-0 right-0 h-1.5 bg-gray-200 rounded-full" />
-                  <div className="absolute top-1/2 -translate-y-1/2 h-1.5 bg-brand rounded-full" style={{ left: `${(priceLo / PRICE_CAP) * 100}%`, right: `${100 - (priceHi / PRICE_CAP) * 100}%` }} />
-                  <input type="range" min="0" max={PRICE_CAP} step="500" value={priceLo} onChange={(e) => onMinSlide(e.target.value)} className={`absolute inset-x-0 top-1/2 -translate-y-1/2 w-full bg-transparent pointer-events-none appearance-none ${THUMB}`} aria-label="Minimum price" />
-                  <input type="range" min="0" max={PRICE_CAP} step="500" value={priceHi} onChange={(e) => onMaxSlide(e.target.value)} className={`absolute inset-x-0 top-1/2 -translate-y-1/2 w-full bg-transparent pointer-events-none appearance-none ${THUMB}`} aria-label="Maximum price" />
+                <div className="relative h-8 select-none" style={{ touchAction: 'none' }}>
+                  <div className="absolute top-1/2 -translate-y-1/2 left-0 right-0 h-1 bg-gray-200 rounded-full" />
+                  <div className="absolute top-1/2 -translate-y-1/2 h-1 bg-brand rounded-full" style={{ left: `${(priceLo / PRICE_CAP) * 100}%`, right: `${100 - (priceHi / PRICE_CAP) * 100}%` }} />
+                  <div onMouseDown={onDotDown('min')} onTouchStart={onDotDown('min')} role="slider" aria-label="Minimum price" aria-valuenow={priceLo} className="absolute top-1/2 -translate-y-1/2 z-10 w-6 h-6 rounded-full bg-white border-[3px] border-brand shadow cursor-grab active:cursor-grabbing active:scale-110 transition-transform" style={{ left: `calc(${(priceLo / PRICE_CAP) * 100}% - 12px)` }} />
+                  <div onMouseDown={onDotDown('max')} onTouchStart={onDotDown('max')} role="slider" aria-label="Maximum price" aria-valuenow={priceHi} className="absolute top-1/2 -translate-y-1/2 z-10 w-6 h-6 rounded-full bg-white border-[3px] border-brand shadow cursor-grab active:cursor-grabbing active:scale-110 transition-transform" style={{ left: `calc(${(priceHi / PRICE_CAP) * 100}% - 12px)` }} />
                 </div>
                 <p className="text-[10px] font-bold text-gray-400 text-center">Slide karo — in dono ke beech wale ads dikhenge</p>
               </div>
