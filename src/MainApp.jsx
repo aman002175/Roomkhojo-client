@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as maplibregl from 'maplibre-gl'; // v6 ESM-only: namespace import (default import hata)
 import 'maplibre-gl/dist/maplibre-gl.css';
@@ -490,7 +490,8 @@ export default function MainApp() {
     map.current.on('load', () => setMapLoaded(true));
   }, [mapDead]);
 
-  const filteredRooms = rooms.filter(r => {
+  // useMemo: har render par nayi array NA banao — warna markers bekaar me rebuild (flicker)
+  const filteredRooms = useMemo(() => rooms.filter(r => {
     const matchesCategory = activeCategory === 'all' || r.category === activeCategory;
     const matchesAudience = activeAudience === 'all' || (r.type || '') === activeAudience;
     const price = priceNum(r.price);
@@ -503,14 +504,14 @@ export default function MainApp() {
     const searchStr = searchQuery.toLowerCase();
     const matchesSearch = r.title.toLowerCase().includes(searchStr) || (r.landmark || 'hanumangarh').toLowerCase().includes(searchStr) || r.type.toLowerCase().includes(searchStr) || r.category.toLowerCase().includes(searchStr);
     return matchesCategory && matchesAudience && matchesSearch && okMin && okMax && okNear;
-  });
+  }), [rooms, activeCategory, activeAudience, searchQuery, minPrice, maxPrice, nearRadius, userLoc]);
 
   // Sort: newest / price low-high / high-low
-  const sortedRooms = [...filteredRooms].sort((a, b) => {
+  const sortedRooms = useMemo(() => [...filteredRooms].sort((a, b) => {
     if (sortBy === 'lo') return priceNum(a.price) - priceNum(b.price);
     if (sortBy === 'hi') return priceNum(b.price) - priceNum(a.price);
     return new Date(b.createdAt) - new Date(a.createdAt);
-  });
+  }), [filteredRooms, sortBy]);
 
   const activeFilterCount = (minPrice !== '' ? 1 : 0) + (maxPrice !== '' ? 1 : 0)
     + (sortBy !== 'new' ? 1 : 0) + (nearRadius !== 0 ? 1 : 0);
@@ -844,15 +845,15 @@ export default function MainApp() {
       setAuthMode('login');
       return;
     }
-    
-    if (navigator.geolocation) {
+    // Form TURANT kholo — location ka 5-sec wait khatam.
+    // Location background me best-effort (mil gayi toh pre-pin, nahi toh Map button hai).
+    setIsPostAdOpen(true);
+    if (navigator.geolocation && postLng === null) {
       navigator.geolocation.getCurrentPosition(
-        () => { setIsPostAdOpen(true); },
+        (pos) => { setPostLng(pos.coords.longitude); setPostLat(pos.coords.latitude); },
         () => { setShowLocationWarning(true); },
-        { enableHighAccuracy: true, timeout: 5000 }
+        { enableHighAccuracy: true, timeout: 8000 }
       );
-    } else {
-      alert("Browser location not supported.");
     }
   };
 
@@ -898,9 +899,14 @@ export default function MainApp() {
 
       <div className="flex-1 relative overflow-hidden bg-gray-100">
         {view === 'map' && !mapLoaded && !mapDead && (
-          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 bg-gray-100/80 pointer-events-none">
-            <p className="font-black text-gray-500 animate-pulse text-sm">Map load ho raha hai…</p>
-            <p className="text-[11px] font-bold text-gray-400">Slow net par 10-20 sec lag sakta hai</p>
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 bg-gray-100/90 pointer-events-none">
+            <p className="text-2xl font-black text-gray-800 tracking-tighter">Room<span className="text-brand">Khojo</span></p>
+            <div className="flex gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-brand animate-bounce" style={{ animationDelay: '0ms' }} />
+              <span className="w-2 h-2 rounded-full bg-brand animate-bounce" style={{ animationDelay: '150ms' }} />
+              <span className="w-2 h-2 rounded-full bg-brand animate-bounce" style={{ animationDelay: '300ms' }} />
+            </div>
+            <p className="text-[11px] font-bold text-gray-400">Map load ho raha hai…</p>
           </div>
         )}
         {mapDead && (

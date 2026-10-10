@@ -24,6 +24,8 @@ export default function UserDashboard() {
   const [oldPw, setOldPw] = useState('');
   const [newPw, setNewPw] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
+  // Pehli load par skeleton dikhao (fetch complete hote hi hatेगा)
+  const [adsLoaded, setAdsLoaded] = useState(false);
   const [myRooms, setMyRooms] = useState([]);
 
   // 🚨 EDIT STATES
@@ -62,7 +64,8 @@ export default function UserDashboard() {
     fetch(`${BASE_URL}/api/rooms/user/${currentUser.id}`, { headers: authHeaders() })
       .then(res => res.json())
       .then(data => { if (data.success) setMyRooms(data.rooms); })
-      .catch((err) => console.error(err));
+      .catch((err) => console.error(err))
+      .finally(() => setAdsLoaded(true));
     fetch(`${BASE_URL}/api/admin/settings`)
       .then(res => res.json())
       .then(data => { if (data.success && data.settings) setSysSettings(data.settings); })
@@ -230,7 +233,16 @@ export default function UserDashboard() {
           <span className="bg-brand/10 text-brand px-3 py-1 rounded-full text-xs font-black">{myRooms.length} Total</span>
         </div>
         
-        {myRooms.length === 0 ? (
+        {!adsLoaded ? (
+          <div className="grid gap-4 pb-10">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="bg-white rounded-3xl overflow-hidden shadow-sm border border-gray-100 p-3 flex gap-4 animate-pulse">
+                <div className="w-24 h-24 rounded-2xl bg-gray-200 shrink-0" />
+                <div className="flex-1 py-1 space-y-2"><div className="h-4 bg-gray-200 rounded-lg w-3/4" /><div className="h-4 bg-gray-200 rounded-lg w-1/3" /><div className="h-3 bg-gray-100 rounded-lg w-1/2" /></div>
+              </div>
+            ))}
+          </div>
+        ) : myRooms.length === 0 ? (
             <div className="space-y-4">
               <div className="bg-blue-50 p-5 rounded-3xl border border-blue-200 text-center">
                 <p className="font-black text-blue-900 mb-1 flex items-center justify-center gap-1.5"><Link size={16} /> Purane ads hain?</p>

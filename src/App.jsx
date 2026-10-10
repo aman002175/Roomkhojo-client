@@ -19,8 +19,14 @@ const normalizePath = (raw, fallback) => {
 };
 
 const PageLoader = () => (
-  <div className="h-[100dvh] w-full flex items-center justify-center bg-white">
-    <p className="font-black text-gray-400 animate-pulse">RoomKhojo loading…</p>
+  <div className="h-[100dvh] w-full flex flex-col items-center justify-center bg-white gap-3">
+    <p className="text-4xl font-black text-gray-800 tracking-tighter">Room<span className="text-brand">Khojo</span></p>
+    <div className="flex gap-1.5">
+      <span className="w-2.5 h-2.5 rounded-full bg-brand animate-bounce" style={{ animationDelay: '0ms' }} />
+      <span className="w-2.5 h-2.5 rounded-full bg-brand animate-bounce" style={{ animationDelay: '150ms' }} />
+      <span className="w-2.5 h-2.5 rounded-full bg-brand animate-bounce" style={{ animationDelay: '300ms' }} />
+    </div>
+    <p className="text-xs font-bold text-gray-400">Rooms dhoondh rahe hain…</p>
   </div>
 );
 
